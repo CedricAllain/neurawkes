@@ -14,6 +14,7 @@ import theano
 from theano import sandbox
 import theano.tensor as tensor
 import os
+from tqdm import tqdm
 #import scipy.io
 from collections import defaultdict
 from theano.tensor.shared_randomstreams import RandomStreams
@@ -139,7 +140,7 @@ def train_hawkes_ctsm(input_train):
         # TODO: shuffle the training data and train this epoch
         data_process.shuffle_train_data()
         #
-        for step_train in range(data_process.max_nums['train']):
+        for step_train in tqdm(range(data_process.max_nums['train'])):
             #
             train_start = time.time()
             # print "the step is ", step
@@ -183,9 +184,9 @@ def train_hawkes_ctsm(input_train):
                 (train_end - train_start)*log_dict['track_period'], 0
             )
             #
-            if step_train % 10 == 9:
-                print("in training, the step is out of ",
-                      step_train, data_process.max_nums['train'])
+            # if step_train % 10 == 9:
+            # print("in training, the step is out of ",
+            #       step_train, data_process.max_nums['train'])
             #
             # print "in training, the step is out of ", step_train, data_process.max_nums['train']
             ########
@@ -202,7 +203,7 @@ def train_hawkes_ctsm(input_train):
                 total_log_likelihood_time_dev = 0.0
                 total_log_likelihood_type_dev = 0.0
                 total_num_of_events_dev = 0.0
-                for step_dev in range(data_process.max_nums['dev']):
+                for step_dev in tqdm(range(data_process.max_nums['dev'])):
                     #
                     data_process.process_data(
                         'dev', step_dev,
@@ -225,9 +226,9 @@ def train_hawkes_ctsm(input_train):
                     total_log_likelihood_type_dev += log_likelihood_type_numpy
                     total_num_of_events_dev += num_of_events_numpy
                     #
-                    if step_dev % 10 == 9:
-                        print("in dev, the step is out of ",
-                              step_dev, data_process.max_nums['dev'])
+                    # if step_dev % 10 == 9:
+                    #     print("in dev, the step is out of ",
+                    #           step_dev, data_process.max_nums['dev'])
                     #
                     # print("in dev, the step is out of ", step_dev, data_process.max_nums['dev'])
                 #
@@ -372,7 +373,7 @@ def test_hawkes_ctsm_and_save(input_test):
         total_log_likelihood_time_dev = 0.0
         total_log_likelihood_type_dev = 0.0
         total_num_of_events_dev = 0.0
-        for step_dev in range(data_process.max_nums[tag_split]):
+        for step_dev in tqdm(range(data_process.max_nums[tag_split])):
             #
             data_process.process_data(
                 tag_split, step_dev,
@@ -408,9 +409,9 @@ def test_hawkes_ctsm_and_save(input_test):
             total_log_likelihood_type_dev += log_likelihood_type_numpy
             total_num_of_events_dev += num_of_events_numpy
             #
-            if step_dev % 100 == 99:
-                print("in validation, the step is out of ",
-                      step_dev, data_process.max_nums[tag_split])
+            # if step_dev % 100 == 99:
+            #     print("in validation, the step is out of ",
+            #           step_dev, data_process.max_nums[tag_split])
             #
         log_likelihood_final = round(
             total_log_likelihood_dev / total_num_of_events_dev, 4
@@ -614,7 +615,7 @@ def test_intensity_and_save(input_test):
         print("validating for ", tag_split)
         #
         # TODO: get the dev loss values
-        for step_dev in range(data_process.max_nums[tag_split]):
+        for step_dev in tqdm(range(data_process.max_nums[tag_split])):
             #
             data_process.process_data_lambda(
                 tag_split, step_dev,
@@ -674,9 +675,9 @@ def test_intensity_and_save(input_test):
                 numpy.copy(num_of_samples_numpy)
             )
             #
-            if step_dev % 100 == 99:
-                print("in validation, the step is out of ",
-                      step_dev, data_process.max_nums[tag_split])
+            # if step_dev % 100 == 99:
+            #     print("in validation, the step is out of ",
+            #           step_dev, data_process.max_nums[tag_split])
             #
         #
         dev_end = time.time()
@@ -835,7 +836,7 @@ def train_hawkesinhib_ctsm(input_train):
         # TODO: shuffle the training data and train this epoch
         data_process.shuffle_train_data()
         #
-        for step_train in range(data_process.max_nums['train']):
+        for step_train in tqdm(range(data_process.max_nums['train'])):
             #
             train_start = time.time()
             # print "the step is ", step
@@ -887,9 +888,9 @@ def train_hawkesinhib_ctsm(input_train):
                 (train_end - train_start)*log_dict['track_period'], 0
             )
             #
-            if step_train % 10 == 9:
-                print("in training, the step is out of ",
-                      step_train, data_process.max_nums['train'])
+            # if step_train % 10 == 9:
+            #     print("in training, the step is out of ",
+            #           step_train, data_process.max_nums['train'])
             ########
             # Now we track the performance and save the model for every # batches, so that we do not miss the convergence within the epoch -- one epoch is too large sometimes
             ########
@@ -904,7 +905,7 @@ def train_hawkesinhib_ctsm(input_train):
                 total_log_likelihood_time_dev = 0.0
                 total_log_likelihood_type_dev = 0.0
                 total_num_of_events_dev = 0.0
-                for step_dev in range(data_process.max_nums['dev']):
+                for step_dev in tqdm(range(data_process.max_nums['dev'])):
                     #
                     data_process.process_data(
                         tag_batch='dev',
@@ -937,9 +938,9 @@ def train_hawkesinhib_ctsm(input_train):
                     total_log_likelihood_type_dev += log_likelihood_type_numpy
                     total_num_of_events_dev += num_of_events_numpy
                     #
-                    if step_dev % 10 == 9:
-                        print("in dev, the step is out of ",
-                              step_dev, data_process.max_nums['dev'])
+                    # if step_dev % 10 == 9:
+                    #     print("in dev, the step is out of ",
+                    #           step_dev, data_process.max_nums['dev'])
                 #
                 #
                 log_dict['tracked']['dev_log_likelihood'] = round(
@@ -1078,7 +1079,7 @@ def test_hawkesinhib_ctsm_and_save(input_test):
         total_log_likelihood_type_dev = 0.0
         total_num_of_events_dev = 0.0
         #
-        for step_dev in range(data_process.max_nums[tag_split]):
+        for step_dev in tqdm(range(data_process.max_nums[tag_split])):
             #
             data_process.process_data(
                 tag_batch=tag_split,
@@ -1124,9 +1125,9 @@ def test_hawkesinhib_ctsm_and_save(input_test):
             total_log_likelihood_type_dev += log_likelihood_type_numpy
             total_num_of_events_dev += num_of_events_numpy
             #
-            if step_dev % 100 == 99:
-                print("in validation, the step is out of ",
-                      step_dev, data_process.max_nums[tag_split])
+            # if step_dev % 100 == 99:
+            #     print("in validation, the step is out of ",
+            #           step_dev, data_process.max_nums[tag_split])
             #
         log_likelihood_final = round(
             total_log_likelihood_dev / total_num_of_events_dev, 4
@@ -1346,7 +1347,7 @@ def train_generalized_neural_hawkes_ctsm_time(
         # TODO: shuffle the training data and train this epoch
         data_process.shuffle_train_data()
         #
-        for step_train in range(data_process.max_nums['train']):
+        for step_train in tqdm(range(data_process.max_nums['train'])):
             #
             train_start = time.time()
             # print "the step is ", step
@@ -1439,9 +1440,9 @@ def train_generalized_neural_hawkes_ctsm_time(
                 (train_end - train_start)*log_dict['track_period'], 0
             )
             #
-            if step_train % 10 == 9:
-                print("in training, the step is out of ",
-                      step_train, data_process.max_nums['train'])
+            # if step_train % 10 == 9:
+            #     print("in training, the step is out of ",
+            #           step_train, data_process.max_nums['train'])
             ########
             # Now we track the performance and save the model for every # batches, so that we do not miss the convergence within the epoch -- one epoch is too large sometimes
             ########
@@ -1460,7 +1461,7 @@ def train_generalized_neural_hawkes_ctsm_time(
                 total_num_of_errors_dev = 0.0
                 total_square_errors_dev = 0.0
                 #
-                for step_dev in range(data_process.max_nums['dev']):
+                for step_dev in tqdm(range(data_process.max_nums['dev'])):
                     #
                     #
                     data_process.process_data(
@@ -1526,9 +1527,9 @@ def train_generalized_neural_hawkes_ctsm_time(
                     total_num_of_errors_dev += num_of_errors_numpy
                     total_square_errors_dev += square_errors_numpy
                     #
-                    if step_dev % 10 == 9:
-                        print("in dev, the step is out of ",
-                              step_dev, data_process.max_nums['dev'])
+                    # if step_dev % 10 == 9:
+                    #     print("in dev, the step is out of ",
+                    #           step_dev, data_process.max_nums['dev'])
                 #
                 #
                 log_dict['tracked']['dev_log_likelihood'] = round(
@@ -1755,7 +1756,7 @@ def train_generalized_neural_hawkes_ctsm_time_DevIncludedSetting(
         # TODO: shuffle the training data and train this epoch
         data_process.shuffle_train_data()
         #
-        for step_train in range(data_process.max_nums['train']):
+        for step_train in tqdm(range(data_process.max_nums['train'])):
             #
             train_start = time.time()
             # print "the step is ", step
@@ -1848,9 +1849,9 @@ def train_generalized_neural_hawkes_ctsm_time_DevIncludedSetting(
                 (train_end - train_start)*log_dict['track_period'], 0
             )
             #
-            if step_train % 10 == 9:
-                print("in training, the step is out of ",
-                      step_train, data_process.max_nums['train'])
+            # if step_train % 10 == 9:
+            #     print("in training, the step is out of ",
+            #           step_train, data_process.max_nums['train'])
             ########
             # Now we track the performance and save the model for every # batches, so that we do not miss the convergence within the epoch -- one epoch is too large sometimes
             ########
@@ -1873,7 +1874,7 @@ def train_generalized_neural_hawkes_ctsm_time_DevIncludedSetting(
                 total_num_of_errors_dev = 0.0
                 total_square_errors_dev = 0.0
                 #
-                for step_dev in range(data_process.max_nums['dev']):
+                for step_dev in tqdm(range(data_process.max_nums['dev'])):
                     #
                     #
                     data_process.process_data(
@@ -1939,9 +1940,9 @@ def train_generalized_neural_hawkes_ctsm_time_DevIncludedSetting(
                     total_num_of_errors_dev += num_of_errors_numpy
                     total_square_errors_dev += square_errors_numpy
                     #
-                    if step_dev % 10 == 9:
-                        print("in dev, the step is out of ",
-                              step_dev, data_process.max_nums['dev'])
+                    # if step_dev % 10 == 9:
+                    #     print("in dev, the step is out of ",
+                    #           step_dev, data_process.max_nums['dev'])
                 #
                 #
                 name_file = 'model'+str(
@@ -2126,7 +2127,7 @@ def test_generalized_neural_hawkes_ctsm_and_save_time(
         total_log_likelihood_type_dev = 0.0
         total_num_of_events_dev = 0.0
         #
-        for step_dev in range(data_process.max_nums[tag_split]):
+        for step_dev in tqdm(range(data_process.max_nums[tag_split])):
             #
             # TODO; print for debug : floating point exp
             # print "step : ", step_dev
@@ -2175,9 +2176,9 @@ def test_generalized_neural_hawkes_ctsm_and_save_time(
             total_log_likelihood_type_dev += log_likelihood_type_numpy
             total_num_of_events_dev += num_of_events_numpy
             #
-            if step_dev % 100 == 99:
-                print("in validation, the step is out of ",
-                      step_dev, data_process.max_nums[tag_split])
+            # if step_dev % 100 == 99:
+            #     print("in validation, the step is out of ",
+            #           step_dev, data_process.max_nums[tag_split])
             #
         log_likelihood_final = round(
             total_log_likelihood_dev / total_num_of_events_dev, 4
@@ -2376,7 +2377,7 @@ def train_neural_hawkes_ctsm(input_train):
         # TODO: shuffle the training data and train this epoch
         data_process.shuffle_train_data()
         #
-        for step_train in range(data_process.max_nums['train']):
+        for step_train in tqdm(range(data_process.max_nums['train'])):
             #
             train_start = time.time()
             # print "the step is ", step
@@ -2429,9 +2430,9 @@ def train_neural_hawkes_ctsm(input_train):
                 (train_end - train_start)*log_dict['track_period'], 0
             )
             #
-            if step_train % 10 == 9:
-                print("in training, the step is out of ",
-                      step_train, data_process.max_nums['train'])
+            # if step_train % 10 == 9:
+            #     print("in training, the step is out of ",
+            #           step_train, data_process.max_nums['train'])
             ########
             # Now we track the performance and save the model for every # batches, so that we do not miss the convergence within the epoch -- one epoch is too large sometimes
             ########
@@ -2446,7 +2447,7 @@ def train_neural_hawkes_ctsm(input_train):
                 total_log_likelihood_time_dev = 0.0
                 total_log_likelihood_type_dev = 0.0
                 total_num_of_events_dev = 0.0
-                for step_dev in range(data_process.max_nums['dev']):
+                for step_dev in tqdm(range(data_process.max_nums['dev'])):
                     #
                     data_process.process_data(
                         tag_batch='dev',
@@ -2479,9 +2480,9 @@ def train_neural_hawkes_ctsm(input_train):
                     total_log_likelihood_type_dev += log_likelihood_type_numpy
                     total_num_of_events_dev += num_of_events_numpy
                     #
-                    if step_dev % 10 == 9:
-                        print("in dev, the step is out of ",
-                              step_dev, data_process.max_nums['dev'])
+                    # if step_dev % 10 == 9:
+                    #     print("in dev, the step is out of ",
+                    #           step_dev, data_process.max_nums['dev'])
                 #
                 #
                 log_dict['tracked']['dev_log_likelihood'] = round(
@@ -2625,7 +2626,7 @@ def test_neural_hawkes_ctsm_and_save(input_test):
         total_log_likelihood_type_dev = 0.0
         total_num_of_events_dev = 0.0
         #
-        for step_dev in range(data_process.max_nums[tag_split]):
+        for step_dev in tqdm(range(data_process.max_nums[tag_split])):
             #
             data_process.process_data(
                 tag_batch=tag_split,
@@ -2669,9 +2670,9 @@ def test_neural_hawkes_ctsm_and_save(input_test):
             total_log_likelihood_type_dev += log_likelihood_type_numpy
             total_num_of_events_dev += num_of_events_numpy
             #
-            if step_dev % 100 == 99:
-                print("in validation, the step is out of ",
-                      step_dev, data_process.max_nums[tag_split])
+            # if step_dev % 100 == 99:
+            #     print("in validation, the step is out of ",
+            #           step_dev, data_process.max_nums[tag_split])
             #
         log_likelihood_final = round(
             total_log_likelihood_dev / total_num_of_events_dev, 4
@@ -2867,7 +2868,7 @@ def train_generalized_neural_hawkes_ctsm(
         # TODO: shuffle the training data and train this epoch
         data_process.shuffle_train_data()
         #
-        for step_train in range(data_process.max_nums['train']):
+        for step_train in tqdm(range(data_process.max_nums['train'])):
             #
             train_start = time.time()
             # print "the step is ", step
@@ -2920,9 +2921,9 @@ def train_generalized_neural_hawkes_ctsm(
                 (train_end - train_start)*log_dict['track_period'], 0
             )
             #
-            if step_train % 10 == 9:
-                print("in training, the step is out of ",
-                      step_train, data_process.max_nums['train'])
+            # if step_train % 10 == 9:
+            #     print("in training, the step is out of ",
+            #           step_train, data_process.max_nums['train'])
             ########
             # Now we track the performance and save the model for every # batches, so that we do not miss the convergence within the epoch -- one epoch is too large sometimes
             ########
@@ -2937,7 +2938,7 @@ def train_generalized_neural_hawkes_ctsm(
                 total_log_likelihood_time_dev = 0.0
                 total_log_likelihood_type_dev = 0.0
                 total_num_of_events_dev = 0.0
-                for step_dev in range(data_process.max_nums['dev']):
+                for step_dev in tqdm(range(data_process.max_nums['dev'])):
                     #
                     data_process.process_data(
                         tag_batch='dev',
@@ -2970,9 +2971,9 @@ def train_generalized_neural_hawkes_ctsm(
                     total_log_likelihood_type_dev += log_likelihood_type_numpy
                     total_num_of_events_dev += num_of_events_numpy
                     #
-                    if step_dev % 10 == 9:
-                        print("in dev, the step is out of ",
-                              step_dev, data_process.max_nums['dev'])
+                    # if step_dev % 10 == 9:
+                    #     print("in dev, the step is out of ",
+                    #           step_dev, data_process.max_nums['dev'])
                 #
                 #
                 log_dict['tracked']['dev_log_likelihood'] = round(
@@ -3136,7 +3137,7 @@ def test_generalized_neural_hawkes_ctsm_and_save(
         total_log_likelihood_type_dev = 0.0
         total_num_of_events_dev = 0.0
         #
-        for step_dev in range(data_process.max_nums[tag_split]):
+        for step_dev in tqdm(range(data_process.max_nums[tag_split])):
             #
             data_process.process_data(
                 tag_batch=tag_split,
@@ -3180,9 +3181,9 @@ def test_generalized_neural_hawkes_ctsm_and_save(
             total_log_likelihood_type_dev += log_likelihood_type_numpy
             total_num_of_events_dev += num_of_events_numpy
             #
-            if step_dev % 100 == 99:
-                print("in validation, the step is out of ",
-                      step_dev, data_process.max_nums[tag_split])
+            # if step_dev % 100 == 99:
+            #     print("in validation, the step is out of ",
+            #           step_dev, data_process.max_nums[tag_split])
             #
         log_likelihood_final = round(
             total_log_likelihood_dev / total_num_of_events_dev, 4
@@ -3378,7 +3379,7 @@ def train_neural_hawkes_ctsm_time(input_train):
         # TODO: shuffle the training data and train this epoch
         data_process.shuffle_train_data()
         #
-        for step_train in range(data_process.max_nums['train']):
+        for step_train in tqdm(range(data_process.max_nums['train'])):
             #
             train_start = time.time()
             # print "the step is ", step
@@ -3432,9 +3433,9 @@ def train_neural_hawkes_ctsm_time(input_train):
                 (train_end - train_start)*log_dict['track_period'], 0
             )
             #
-            if step_train % 10 == 9:
-                print("in training, the step is out of ",
-                      step_train, data_process.max_nums['train'])
+            # if step_train % 10 == 9:
+            #     print("in training, the step is out of ",
+            #           step_train, data_process.max_nums['train'])
             ########
             # Now we track the performance and save the model for every # batches, so that we do not miss the convergence within the epoch -- one epoch is too large sometimes
             ########
@@ -3449,7 +3450,7 @@ def train_neural_hawkes_ctsm_time(input_train):
                 total_log_likelihood_time_dev = 0.0
                 total_log_likelihood_type_dev = 0.0
                 total_num_of_events_dev = 0.0
-                for step_dev in range(data_process.max_nums['dev']):
+                for step_dev in tqdm(range(data_process.max_nums['dev'])):
                     #
                     data_process.process_data(
                         tag_batch='dev',
@@ -3483,9 +3484,9 @@ def train_neural_hawkes_ctsm_time(input_train):
                     total_log_likelihood_type_dev += log_likelihood_type_numpy
                     total_num_of_events_dev += num_of_events_numpy
                     #
-                    if step_dev % 10 == 9:
-                        print("in dev, the step is out of ",
-                              step_dev, data_process.max_nums['dev'])
+                    # if step_dev % 10 == 9:
+                    #     print("in dev, the step is out of ",
+                    #           step_dev, data_process.max_nums['dev'])
                 #
                 #
                 log_dict['tracked']['dev_log_likelihood'] = round(
@@ -3630,7 +3631,7 @@ def test_neural_hawkes_ctsm_and_save_time(input_test):
         total_log_likelihood_type_dev = 0.0
         total_num_of_events_dev = 0.0
         #
-        for step_dev in range(data_process.max_nums[tag_split]):
+        for step_dev in tqdm(range(data_process.max_nums[tag_split])):
             #
             data_process.process_data(
                 tag_batch=tag_split,
@@ -3675,9 +3676,9 @@ def test_neural_hawkes_ctsm_and_save_time(input_test):
             total_log_likelihood_type_dev += log_likelihood_type_numpy
             total_num_of_events_dev += num_of_events_numpy
             #
-            if step_dev % 100 == 99:
-                print("in validation, the step is out of ",
-                      step_dev, data_process.max_nums[tag_split])
+            # if step_dev % 100 == 99:
+            #     print("in validation, the step is out of ",
+            #           step_dev, data_process.max_nums[tag_split])
             #
         log_likelihood_final = round(
             total_log_likelihood_dev / total_num_of_events_dev, 4

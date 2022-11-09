@@ -198,7 +198,7 @@ class DataProcesser(object):
         # assert(tag=='train')
         print("shuffling training data idx ... ")
         # we shuffle idx instead of the real data
-        numpy.random.shuffle(self.list_idx['train'])
+        numpy.random.shuffle(list(self.list_idx['train']))
 
     #
     def prune_stream(self, tag_discard):

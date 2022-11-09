@@ -19,19 +19,21 @@ from collections import defaultdict
 from theano.tensor.shared_randomstreams import RandomStreams
 import struct
 
-import utils
+from . import utils
 
 
-dtype=theano.config.floatX
+dtype = theano.config.floatX
+
 
 class DataProcesser(object):
     '''
     this class process raw data into the model-friendly format
     and save them when neccessary
     '''
+
     def __init__(self, settings):
         #
-        print "initialize the data processer ... "
+        print("initialize the data processer ... ")
         self.path_rawdata = os.path.abspath(
             settings['path_rawdata']
         )
@@ -48,10 +50,10 @@ class DataProcesser(object):
             'dev': [], 'devtest': [], 'test': []
         }
         for tag_split in self.to_read:
-            print "reading data for tag : ", tag_split
+            print("reading data for tag : ", tag_split)
             path_to_read = self.path_rawdata + '/' + tag_split + '.pkl'
             with open(path_to_read, 'rb') as f:
-                data_temp = pickle.load(f)
+                data_temp = pickle.load(f, encoding='latin1')
                 self.data[tag_split] = data_temp[tag_split]
                 if 'dim_process' in data_temp:
                     self.data['dim_process'] = data_temp['dim_process']
@@ -72,7 +74,7 @@ class DataProcesser(object):
                         counts[type_event] += 1
                     else:
                         counts[type_event] = 1
-            self.dim_process = numpy.int32(len(counts) )
+            self.dim_process = numpy.int32(len(counts))
         #
         len_to_select = numpy.int32(
             len(self.data['train']) * self.ratio_train
@@ -94,10 +96,10 @@ class DataProcesser(object):
         # chop the data
         # computing max num of batches for all data ...
         self.max_nums = {
-            'train': int( self.lens['train']/self.size_batch ),
-            'dev': int( self.lens['dev']/self.size_batch ),
-            'devtest': int( self.lens['devtest']/self.size_batch ),
-            'test': int( self.lens['test']/self.size_batch )
+            'train': int(self.lens['train']/self.size_batch),
+            'dev': int(self.lens['dev']/self.size_batch),
+            'devtest': int(self.lens['devtest']/self.size_batch),
+            'test': int(self.lens['test']/self.size_batch)
         }
         #
         # decide if we only predict partial stream
@@ -110,15 +112,16 @@ class DataProcesser(object):
         this feature is useless now ...
         '''
         #
-        print "finish data processer initialization ... "
+        print("finish data processer initialization ... ")
         #
         #
         #
     #
     #
+
     def re_init(self):
         #
-        print "re-initialize the data processer for DevIncludedSetting ... "
+        print("re-initialize the data processer for DevIncludedSetting ... ")
         #
         data_temp = self.data
         self.data = {
@@ -134,7 +137,7 @@ class DataProcesser(object):
             'devtest': len(self.data['devtest']),
             'test': len(self.data['test'])
         }
-        print "lens : ", self.lens
+        print("lens : ", self.lens)
         self.list_idx = {
             'train': range(self.lens['train']),
             'dev': range(self.lens['dev']),
@@ -144,23 +147,25 @@ class DataProcesser(object):
         # chop the data
         # computing max num of batches for all data ...
         self.max_nums = {
-            'train': int( self.lens['train']/self.size_batch ),
-            'dev': int( self.lens['dev']/self.size_batch ),
-            'devtest': int( self.lens['devtest']/self.size_batch ),
-            'test': int( self.lens['test']/self.size_batch )
+            'train': int(self.lens['train']/self.size_batch),
+            'dev': int(self.lens['dev']/self.size_batch),
+            'devtest': int(self.lens['devtest']/self.size_batch),
+            'test': int(self.lens['test']/self.size_batch)
         }
         #
-        print "finish data processer re-initialization for DevIncludedSetting ... "
+        print("finish data processer re-initialization for DevIncludedSetting ... ")
         #
     #
     #
+
     def float32_to_bit(self, float_input):
         '''
         input a number in float, convert it to float32
         get its 32-bit representations
         '''
         float32_input = numpy.float32(float_input)
-        str_input = ''.join(bin(ord(c)).replace('0b', '').rjust(8, '0') for c in struct.pack('!f', float32_input))
+        str_input = ''.join(bin(ord(c)).replace('0b', '').rjust(8, '0')
+                            for c in struct.pack('!f', float32_input))
         bit_input = numpy.zeros(
             (self.dim_float,), dtype=dtype
         )
@@ -170,6 +175,7 @@ class DataProcesser(object):
         return numpy.copy(bit_input)
     #
     #
+
     def get_time_quantiles(self):
         self.time_quantiles = numpy.zeros(
             (self.dim_time, ), dtype=dtype
@@ -189,18 +195,18 @@ class DataProcesser(object):
     #
 
     def shuffle_train_data(self):
-        #assert(tag=='train')
-        print "shuffling training data idx ... "
+        # assert(tag=='train')
+        print("shuffling training data idx ... ")
         # we shuffle idx instead of the real data
         numpy.random.shuffle(self.list_idx['train'])
 
     #
     def prune_stream(self, tag_discard):
-        #TODO: prune the stream by discarding events
+        # TODO: prune the stream by discarding events
         # tag_discard can be :
         # 0, 1, 2, ..., 2**dim_process-1
-        print "pruning stream ... "
-        print "find the substream to keep ... "
+        print("pruning stream ... ")
+        print("find the substream to keep ... ")
         tag_discard = numpy.int32(tag_discard)
         assert(
             tag_discard >= 0 and tag_discard <= 2**self.dim_process-1
@@ -213,9 +219,9 @@ class DataProcesser(object):
             if bin_str[self.dim_process-idx_process-1] == '0':
                 self.list_to_keep.append(idx_process)
         #
-        print "discarding except : ", self.list_to_keep
+        print("discarding except : ", self.list_to_keep)
         data_temp = self.data
-        #print "keys of data_temp is : ", data_temp.keys()
+        # print "keys of data_temp is : ", data_temp.keys()
         self.data = {}
         # ['test', 'dim_process', 'train', 'devtest', 'dev']
         for tag_split in ['train', 'dev', 'devtest', 'test']:
@@ -226,19 +232,20 @@ class DataProcesser(object):
                         item for item in seq if item['type_event'] in self.list_to_keep
                     ]
                 )
-        print "re-compute the time since last event ... "
+        print("re-compute the time since last event ... ")
         for tag_split in ['train', 'dev', 'devtest', 'test']:
             for seq in self.data[tag_split]:
                 if len(seq) >= 1:
                     seq[0]['time_since_last_event'] = seq[0]['time_since_start']
                 if len(seq) >= 2:
                     for idx, item in enumerate(seq[1:]):
-                        item['time_since_last_event'] = item['time_since_start'] - seq[idx]['time_since_start']
+                        item['time_since_last_event'] = item['time_since_start'] - \
+                            seq[idx]['time_since_start']
         #
     #
 
     def process_seq(self):
-        #print "getting batch ... "
+        # print "getting batch ... "
         max_len = 0
         temp_list_seq_type_event = []
         temp_list_seq_time_since_last = []
@@ -275,13 +282,14 @@ class DataProcesser(object):
         for idx_in_batch, (seq_type_event, seq_time_since_last) in enumerate(zip(temp_list_seq_type_event, temp_list_seq_time_since_last)):
             for idx_pos, (type_event, time_since_start) in enumerate(zip(seq_type_event, seq_time_since_last)):
                 self.seq_type_event_numpy[idx_pos, idx_in_batch] = type_event
-                self.seq_time_since_last_numpy[idx_pos, idx_in_batch] = time_since_start
+                self.seq_time_since_last_numpy[idx_pos,
+                                               idx_in_batch] = time_since_start
                 self.seq_mask_numpy[idx_pos, idx_in_batch] = numpy.float32(1.0)
         #
         #
 
     def process_seq_hawkes(self, predict_first):
-        #print "getting batch ... "
+        # print "getting batch ... "
         self.max_len = 0
         for idx_in_batch, idx_data in enumerate(self.list_idx_data):
             len_seq = len(
@@ -315,9 +323,9 @@ class DataProcesser(object):
         self.num_events_start_to_end_numpy = numpy.zeros(
             (self.size_batch, ), dtype=dtype
         )
-        #self.num_sims_start_to_end = numpy.zeros(
+        # self.num_sims_start_to_end = numpy.zeros(
         #    (self.size_batch, ), dtype=dtype
-        #)
+        # )
         #
         for idx_in_batch, idx_data in enumerate(self.list_idx_data):
             seq = self.data[self.tag_batch][idx_data]
@@ -331,7 +339,7 @@ class DataProcesser(object):
                 #
                 self.num_events_start_to_end_numpy[
                     idx_in_batch
-                ] = numpy.float32(len(seq) )
+                ] = numpy.float32(len(seq))
             else:
                 time_end = numpy.float32(0.0)
                 self.time_since_start_to_end_numpy[
@@ -340,11 +348,11 @@ class DataProcesser(object):
                 self.num_events_start_to_end_numpy[
                     idx_in_batch
                 ] = numpy.float32(1)
-            #self.num_sims_start_to_end[
+            # self.num_sims_start_to_end[
             #    idx_in_batch
-            #] = numpy.float32(
+            # ] = numpy.float32(
             #    multiple * self.num_events_start_to_end[idx_in_batch]
-            #)
+            # )
             #
             for idx_pos, item_event in enumerate(seq):
                 #
@@ -362,7 +370,8 @@ class DataProcesser(object):
                 #
                 if self.partial_predict:
                     if item_event['type_event'] not in self.substream:
-                        self.seq_mask_numpy[idx_pos, idx_in_batch] = numpy.float32(0.0)
+                        self.seq_mask_numpy[idx_pos,
+                                            idx_in_batch] = numpy.float32(0.0)
                 #
                 idx_pos_prime = 0
                 while idx_pos_prime < idx_pos:
@@ -381,12 +390,13 @@ class DataProcesser(object):
                     idx_pos_prime += 1
                     #
         if not predict_first:
-            self.seq_mask_numpy[0,:] = numpy.float32(0.0)
+            self.seq_mask_numpy[0, :] = numpy.float32(0.0)
         #
         #
     #
     #
-    def sample_times(self, multiple=numpy.int32(10) ):
+
+    def sample_times(self, multiple=numpy.int32(10)):
         self.num_sims_start_to_end_numpy = numpy.float32(
             multiple * self.num_events_start_to_end_numpy
         )
@@ -418,9 +428,9 @@ class DataProcesser(object):
             #
             sampled_times = numpy.sort(
                 numpy.random.uniform(
-                    low = 0.0,
-                    high = self.time_since_start_to_end_numpy[idx_in_batch],
-                    size = (num_sims_this_seq,)
+                    low=0.0,
+                    high=self.time_since_start_to_end_numpy[idx_in_batch],
+                    size=(num_sims_this_seq,)
                 )
             )
             temp_column = numpy.zeros(
@@ -450,7 +460,7 @@ class DataProcesser(object):
     def get_tensors_hawkes_given_sampled_times(self):
         #
         self.seq_type_event_hawkes_numpy = numpy.copy(
-            self.seq_type_event_numpy[1:,:]
+            self.seq_type_event_numpy[1:, :]
         )
         self.seq_sims_time_to_current_hawkes_numpy = numpy.zeros(
             (self.max_num_sims, self.max_len, self.size_batch), dtype=dtype
@@ -466,7 +476,7 @@ class DataProcesser(object):
             )
             #
             temp_column = numpy.copy(
-                self.sampled_times_numpy[:,idx_in_batch]
+                self.sampled_times_numpy[:, idx_in_batch]
             )
             for idx_pos_prime, item_event_prime in enumerate(seq):
                 t_i_prime = item_event_prime[
@@ -496,7 +506,7 @@ class DataProcesser(object):
 
     #
     def process_seq_nan(self, predict_first):
-        #print "getting batch ... "
+        # print "getting batch ... "
         self.max_len = 0
         for idx_in_batch, idx_data in enumerate(self.list_idx_data):
             len_seq = len(
@@ -505,9 +515,9 @@ class DataProcesser(object):
             if self.max_len < len_seq:
                 self.max_len = len_seq
         #
-        #self.seq_time_to_end_numpy = numpy.zeros(
+        # self.seq_time_to_end_numpy = numpy.zeros(
         #    (self.max_len, self.size_batch), dtype=dtype
-        #)
+        # )
         self.seq_time_to_current_numpy = numpy.zeros(
             (self.max_len, self.size_batch),
             dtype=dtype
@@ -517,7 +527,7 @@ class DataProcesser(object):
             dtype=numpy.int32
         )
         self.seq_mask_numpy = numpy.zeros(
-            (self.max_len-1, self.size_batch), dtype = dtype
+            (self.max_len-1, self.size_batch), dtype=dtype
         )
         #
         for idx_in_batch, idx_data in enumerate(self.list_idx_data):
@@ -529,8 +539,8 @@ class DataProcesser(object):
                 #
                 self.seq_type_event_numpy[
                     idx_pos, idx_in_batch
-                ] = numpy.int32(item_event['type_event'] )
-                #TODO: sometimes, we do not want to predict the first one, so we only predict starting from the second ...
+                ] = numpy.int32(item_event['type_event'])
+                # TODO: sometimes, we do not want to predict the first one, so we only predict starting from the second ...
                 if idx_pos > 0:
                     self.seq_mask_numpy[
                         idx_pos-1, idx_in_batch
@@ -539,7 +549,8 @@ class DataProcesser(object):
                 #
                 if self.partial_predict:
                     if item_event['type_event'] not in self.substream:
-                        self.seq_mask_numpy[idx_pos-1, idx_in_batch] = numpy.float32(0.0)
+                        self.seq_mask_numpy[idx_pos-1,
+                                            idx_in_batch] = numpy.float32(0.0)
                 #
                 #
                 self.seq_time_to_current_numpy[
@@ -550,63 +561,64 @@ class DataProcesser(object):
         #
     #
     #
+
     def process_seq_neural_non_sample(self, predict_first):
-        #print "getting batch ... "
+        # print "getting batch ... "
         self.max_len = 0
         for idx_in_batch, idx_data in enumerate(self.list_idx_data):
-            #TODO: print for debug : floating point exp
-            #print "seq is : ", self.data[self.tag_batch][idx_data]
+            # TODO: print for debug : floating point exp
+            # print "seq is : ", self.data[self.tag_batch][idx_data]
             len_seq = len(
                 self.data[self.tag_batch][idx_data]
             )
             if self.max_len < len_seq:
                 self.max_len = len_seq
         #
-        #self.seq_time_to_end_numpy = numpy.zeros(
+        # self.seq_time_to_end_numpy = numpy.zeros(
         #    (self.max_len, self.size_batch), dtype=dtype
-        #)
-        #print "prepare array ... "
+        # )
+        # print "prepare array ... "
         if self.max_len < 1:
             self.max_len = numpy.int32(1)
         #
         self.seq_time_to_current_numpy = numpy.zeros(
             (self.max_len, self.size_batch),
             dtype=dtype
-        ) #
+        )
         self.seq_type_event_numpy = numpy.zeros(
             (self.max_len+numpy.int32(1), self.size_batch),
             dtype=numpy.int32
-        ) #
+        )
         self.seq_time_rep_numpy = numpy.zeros(
             (
                 self.max_len+numpy.int32(1),
                 self.size_batch, self.dim_time
-            ), dtype = dtype
-        ) #
+            ), dtype=dtype
+        )
         #
         self.seq_time_values_numpy = numpy.zeros(
             (
                 self.max_len+numpy.int32(1),
                 self.size_batch
-            ), dtype = dtype
+            ), dtype=dtype
         )
         #
         self.time_since_start_to_end_numpy = numpy.zeros(
             (self.size_batch,), dtype=dtype
-        ) #
+        )
         self.seq_mask_numpy = numpy.zeros(
-            (self.max_len, self.size_batch), dtype = dtype
-        ) #
+            (self.max_len, self.size_batch), dtype=dtype
+        )
         #
         self.num_events_start_to_end_numpy = numpy.zeros(
-            (self.size_batch, ), dtype = dtype
-        ) #
-        #self.num_sims_start_to_end = numpy.zeros(
+            (self.size_batch, ), dtype=dtype
+        )
+        # self.num_sims_start_to_end = numpy.zeros(
         #    (self.size_batch, ), dtype=dtype
-        #)
+        # )
         #
-        #print "fill in the array"
-        #print "one shape : ", self.seq_time_to_current_numpy.shape
+        # print "fill in the array"
+        # print "one shape : ", self.seq_time_to_current_numpy.shape
         for idx_in_batch, idx_data in enumerate(self.list_idx_data):
             seq = self.data[self.tag_batch][idx_data]
             #
@@ -619,7 +631,7 @@ class DataProcesser(object):
                 #
                 self.num_events_start_to_end_numpy[
                     idx_in_batch
-                ] = numpy.float32(len(seq) )
+                ] = numpy.float32(len(seq))
             else:
                 time_end = numpy.float32(0.0)
                 #
@@ -630,11 +642,11 @@ class DataProcesser(object):
                 self.num_events_start_to_end_numpy[
                     idx_in_batch
                 ] = numpy.float32(1)
-            #self.num_sims_start_to_end[
+            # self.num_sims_start_to_end[
             #    idx_in_batch
-            #] = numpy.float32(
+            # ] = numpy.float32(
             #    multiple * self.num_events_start_to_end[idx_in_batch]
-            #)
+            # )
             self.seq_type_event_numpy[
                 numpy.int32(0), idx_in_batch
             ] = numpy.int32(self.dim_process)
@@ -645,7 +657,7 @@ class DataProcesser(object):
                 #
                 self.seq_type_event_numpy[
                     idx_pos+numpy.int32(1), idx_in_batch
-                ] = numpy.int32(item_event['type_event'] )
+                ] = numpy.int32(item_event['type_event'])
                 #
                 self.seq_mask_numpy[
                     idx_pos, idx_in_batch
@@ -654,7 +666,8 @@ class DataProcesser(object):
                 #
                 if self.partial_predict:
                     if item_event['type_event'] not in self.substream:
-                        self.seq_mask_numpy[idx_pos, idx_in_batch] = numpy.float32(0.0)
+                        self.seq_mask_numpy[idx_pos,
+                                            idx_in_batch] = numpy.float32(0.0)
                 #
                 #
                 self.seq_time_to_current_numpy[
@@ -672,15 +685,14 @@ class DataProcesser(object):
                 #
             #
         #
-        #TODO: sometimes,
-        #we do not want to predict the first one,
-        #so we only predict starting from the second ...
-        #example : all datasets from GaTech
-        #if idx_pos > 0:
+        # TODO: sometimes,
+        # we do not want to predict the first one,
+        # so we only predict starting from the second ...
+        # example : all datasets from GaTech
+        # if idx_pos > 0:
         if not predict_first:
-            self.seq_mask_numpy[0,:] = numpy.float32(0.0)
+            self.seq_mask_numpy[0, :] = numpy.float32(0.0)
         #
-
 
     def sample_times_neural(
         self, multiple=numpy.int32(10)
@@ -695,15 +707,15 @@ class DataProcesser(object):
         )
         self.seq_sims_time_to_current_numpy = numpy.zeros(
             (self.max_num_sims, self.size_batch),
-            dtype = dtype
+            dtype=dtype
         )
         self.seq_sims_index_in_hidden_numpy = numpy.zeros(
             (self.max_num_sims, self.size_batch),
-            dtype = numpy.int32
+            dtype=numpy.int32
         )
         self.seq_sims_mask_numpy = numpy.zeros(
             (self.max_num_sims, self.size_batch),
-            dtype = dtype
+            dtype=dtype
         )
         #
         '''
@@ -729,9 +741,9 @@ class DataProcesser(object):
             #
             sampled_times = numpy.sort(
                 numpy.random.uniform(
-                    low = 0.0,
-                    high = self.time_since_start_to_end_numpy[idx_in_batch],
-                    size = (num_sims_this_seq,)
+                    low=0.0,
+                    high=self.time_since_start_to_end_numpy[idx_in_batch],
+                    size=(num_sims_this_seq,)
                 )
             )
             temp_column = numpy.zeros(
@@ -741,7 +753,7 @@ class DataProcesser(object):
                 sampled_times
             )
             #
-            self.sampled_times_numpy[:,idx_in_batch] = numpy.copy(temp_column)
+            self.sampled_times_numpy[:, idx_in_batch] = numpy.copy(temp_column)
             #
             # for the sim times that < t_1
             # the time to current is sim times
@@ -751,10 +763,10 @@ class DataProcesser(object):
                 t_1 = seq[0]['time_since_start']
             else:
                 t_1 = numpy.float32(0.0)
-            indices_to_edit = ( temp_column < t_1 )
+            indices_to_edit = (temp_column < t_1)
             self.seq_sims_time_to_current_numpy[
                 indices_to_edit, idx_in_batch
-            ] = numpy.copy(temp_column[indices_to_edit] )
+            ] = numpy.copy(temp_column[indices_to_edit])
             '''
             T * size_batch * dim_model |-->
             (T * size_batch) * dim_model
@@ -787,7 +799,8 @@ class DataProcesser(object):
                 self.seq_sims_index_in_hidden_numpy[
                     indices_to_edit, idx_in_batch
                 ] = numpy.int32(
-                    (idx_pos_prime + numpy.int32(1) ) * self.size_batch + idx_in_batch
+                    (idx_pos_prime + numpy.int32(1)) *
+                    self.size_batch + idx_in_batch
                 )
                 '''
                 we need to +1 since 0 -- self.size_batch is taken by the first couple of samples
@@ -825,15 +838,15 @@ class DataProcesser(object):
 
     def process_data(
         self, tag_batch, idx_batch_current=0,
-        tag_model = 'hawkes',
-        multiple = numpy.int32(10),
-        predict_first = True
+        tag_model='hawkes',
+        multiple=numpy.int32(10),
+        predict_first=True
     ):
         #
         self.tag_batch = tag_batch
         self.list_idx_data = [
             idx for idx in self.list_idx[self.tag_batch][
-                idx_batch_current * self.size_batch : (idx_batch_current + 1) * self.size_batch
+                idx_batch_current * self.size_batch: (idx_batch_current + 1) * self.size_batch
             ]
         ]
         assert(
@@ -853,19 +866,20 @@ class DataProcesser(object):
         elif tag_model == 'nanmodel':
             self.process_seq_nan(predict_first)
         else:
-            print "wrong model tag"
+            print("wrong model tag")
     #
     #
+
     def process_data_lambda(
         self, tag_batch, idx_batch_current=0,
-        multiple = numpy.int32(10),
-        predict_first = True
+        multiple=numpy.int32(10),
+        predict_first=True
     ):
         #
         self.tag_batch = tag_batch
         self.list_idx_data = [
             idx for idx in self.list_idx[self.tag_batch][
-                idx_batch_current * self.size_batch : (idx_batch_current + 1) * self.size_batch
+                idx_batch_current * self.size_batch: (idx_batch_current + 1) * self.size_batch
             ]
         ]
         #
@@ -883,7 +897,7 @@ class DataProcesser(object):
         '''
         log dict keys : log_file, compile_time, things need to be tracked
         '''
-        print "creating training log file ... "
+        print("creating training log file ... ")
         current_log_file = os.path.abspath(
             log_dict['log_file']
         )
@@ -898,7 +912,8 @@ class DataProcesser(object):
                 )
                 f.write('\n')
             #
-            f.write('Before training, the compilation time is '+str(log_dict['compile_time'])+' sec ... \n')
+            f.write('Before training, the compilation time is ' +
+                    str(log_dict['compile_time'])+' sec ... \n')
             f.write('Things that need to be tracked : \n')
             for the_key in log_dict['tracked']:
                 f.write(the_key+' ')
@@ -906,7 +921,7 @@ class DataProcesser(object):
         #
 
     def continue_log(self, log_dict):
-        print "continue tracking log ... "
+        print("continue tracking log ... ")
         current_log_file = os.path.abspath(
             log_dict['log_file']
         )
@@ -946,12 +961,12 @@ class DataProcesser(object):
                             the_key
                         ] = log_dict['tracked'][the_key]
             else:
-                print "what to track ?"
+                print("what to track ?")
             #
             f.write('\n')
 
     def finish_log(self, log_dict):
-        print "finish tracking log ... "
+        print("finish tracking log ... ")
         current_log_file = os.path.abspath(
             log_dict['log_file']
         )
@@ -965,11 +980,11 @@ class DataProcesser(object):
             f.write('\n')
 
     def track_log(self, log_dict):
-        #print "recording training log ... "
+        # print "recording training log ... "
         '''
         log dict keys : log_file, compile_time, things need to be tracked
         '''
-        assert(log_dict['mode']=='create' or log_dict['mode']=='continue')
+        assert(log_dict['mode'] == 'create' or log_dict['mode'] == 'continue')
         if log_dict['mode'] == 'create':
             self.creat_log(log_dict)
         else:

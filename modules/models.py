@@ -17,18 +17,21 @@ import os
 #import scipy.io
 from collections import defaultdict
 from theano.tensor.shared_randomstreams import RandomStreams
-import utils
 
-dtype=theano.config.floatX
+from . import utils
+
+dtype = theano.config.floatX
 
 #
+
+
 class HawkesCTSM(object):
     #
     def __init__(self, settings):
         self.size_batch = settings['size_batch']
         self.coef_l2 = settings['coef_l2']
-        print "initializing Hawkes CTSM ... "
-        if settings['path_pre_train'] == None:
+        print("initializing Hawkes CTSM ... ")
+        if settings['path_pre_train'] is None:
             self.dim_process = settings['dim_process']
             # initialize variables
             self.mu = theano.shared(
@@ -61,7 +64,7 @@ class HawkesCTSM(object):
             )
             with open(path_pre_train, 'rb') as f:
                 model_pre_train = pickle.load(f)
-            #with open(settings['path_pre_train'], 'rb') as f:
+            # with open(settings['path_pre_train'], 'rb') as f:
             #    model_pre_train = pickle.load(f)
             self.dim_process = model_pre_train['dim_process']
             self.mu = theano.shared(
@@ -88,7 +91,7 @@ class HawkesCTSM(object):
         #
         self.norm_l2 = numpy.float32(0.0)
         for param in self.params:
-            self.norm_l2 += tensor.sum( param ** 2 )
+            self.norm_l2 += tensor.sum(param ** 2)
         self.term_reg = self.coef_l2 * self.norm_l2
         #
         # to evaluate per-event intensity predict
@@ -98,6 +101,7 @@ class HawkesCTSM(object):
         #
     #
     #
+
     def compute_loss(
         self,
         seq_time_to_end, seq_time_to_current, seq_type_event,
@@ -117,14 +121,14 @@ class HawkesCTSM(object):
         seq_mask : T * size_batch -- 1/0
         seq_mask_to_current : T * T * size_batch -- 1/0
         '''
-        print "computing loss function of Hawkes model ... "
+        print("computing loss function of Hawkes model ... ")
         # first compute the 3rd term in loss
         alpha_over_seq = self.alpha[
             :, seq_type_event
-        ] # dim_process * T * size_batch
+        ]  # dim_process * T * size_batch
         delta_over_seq = self.delta[
             :, seq_type_event
-        ] # dim_process * T * size_batch
+        ]  # dim_process * T * size_batch
         #
         term_3 = tensor.sum(
             tensor.sum(
@@ -137,10 +141,10 @@ class HawkesCTSM(object):
                         )
                     ) * alpha_over_seq / delta_over_seq
                 ),
-                axis = 0
+                axis=0
             ) * seq_mask,
-            axis = 0
-        ) # (size_batch, )
+            axis=0
+        )  # (size_batch, )
         # then we compute the 2nd term
         term_2 = tensor.sum(self.mu) * time_since_start_to_end
         # (size_batch, )
@@ -149,20 +153,19 @@ class HawkesCTSM(object):
         # seq_mask_to_current : T * T * size_batch
         lambda_over_seq = self.mu[:, None, None] + tensor.sum(
             (
-                seq_mask_to_current[None,:,:,:]
+                seq_mask_to_current[None, :, :, :]
                 * (
-                    alpha_over_seq[:,None,:,:] * tensor.exp(
-                        -delta_over_seq[:,None,:,:]
-                        * seq_time_to_current[None,:,:,:]
+                    alpha_over_seq[:, None, :, :] * tensor.exp(
+                        -delta_over_seq[:, None, :, :]
+                        * seq_time_to_current[None, :, :, :]
                     )
                 )
-            )
-            , axis=2
-        ) # dim_process * T * size_batch
+            ), axis=2
+        )  # dim_process * T * size_batch
         #
         lambda_sum_over_seq = tensor.sum(
             lambda_over_seq, axis=0
-        ) # T * size_batch
+        )  # T * size_batch
         #
         # now we choose the right lambda for each step
         # by using seq_type_event : T * size_batch
@@ -173,7 +176,7 @@ class HawkesCTSM(object):
         back_shape_1 = lambda_over_seq.shape[2]
         #
         lambda_target_over_seq = lambda_over_seq.transpose(
-            (1,2,0)
+            (1, 2, 0)
         ).reshape(
             (
                 new_shape_0, new_shape_1
@@ -230,6 +233,7 @@ class HawkesCTSM(object):
         #
     #
     #
+
     def compute_lambda(
         self,
         seq_type_event,
@@ -247,37 +251,38 @@ class HawkesCTSM(object):
         seq_sims_mask : N * size_batch
         seq_sims_mask_to_current : N * T * size_batch
         '''
-        print "computing intensity ... "
+        print("computing intensity ... ")
         # first compute the 3rd term in loss
         alpha_over_seq = self.alpha[
             :, seq_type_event
-        ] # dim_process * T * size_batch
+        ]  # dim_process * T * size_batch
         delta_over_seq = self.delta[
             :, seq_type_event
-        ] # dim_process * T * size_batch
+        ]  # dim_process * T * size_batch
         #
         '''
         in this block, we compute intensity
         at sampled time
         '''
         #
-        lambda_samples = self.mu[:,None,None] + tensor.sum(
+        lambda_samples = self.mu[:, None, None] + tensor.sum(
             (
-                seq_sims_mask_to_current[None,:,:,:] * (
-                    alpha_over_seq[:,None,:,:] * tensor.exp(
-                        -delta_over_seq[:,None,:,:] * seq_sims_time_to_current[None,:,:,:]
+                seq_sims_mask_to_current[None, :, :, :] * (
+                    alpha_over_seq[:, None, :, :] * tensor.exp(
+                        -delta_over_seq[:, None, :, :] *
+                        seq_sims_time_to_current[None, :, :, :]
                     )
                 )
             ), axis=2
         )
         # K * N * size_batch
-        self.lambda_samples = lambda_samples * seq_sims_mask[None,:,:]
+        self.lambda_samples = lambda_samples * seq_sims_mask[None, :, :]
         self.num_of_samples = tensor.sum(seq_sims_mask)
         #
     #
-    #
+
     def save_model(self, file_save):
-        print "saving model ... "
+        print("saving model ... ")
         model_dict = {}
         for param in self.params:
             model_dict[param.name] = numpy.copy(
@@ -290,14 +295,15 @@ class HawkesCTSM(object):
 #
 #
 # Note : _scale means : we use scaling parameter in transfer function
-#
+
+
 class HawkesInhibCTSM_scale(object):
     #
     def __init__(self, settings):
         self.size_batch = settings['size_batch']
         self.coef_l2 = settings['coef_l2']
-        print "initializing Hawkes CTSM ... "
-        if settings['path_pre_train'] == None:
+        print("initializing Hawkes CTSM ... ")
+        if settings['path_pre_train'] is None:
             self.dim_process = settings['dim_process']
             # initialize variables
             self.scale = theano.shared(
@@ -336,7 +342,7 @@ class HawkesInhibCTSM_scale(object):
             )
             with open(path_pre_train, 'rb') as f:
                 model_pre_train = pickle.load(f)
-            #with open(settings['path_pre_train'], 'rb') as f:
+            # with open(settings['path_pre_train'], 'rb') as f:
             #    model_pre_train = pickle.load(f)
             self.dim_process = model_pre_train['dim_process']
             self.scale = theano.shared(
@@ -355,7 +361,7 @@ class HawkesInhibCTSM_scale(object):
         # alpha & delta, i-row j-col is the effect of j to i
         #
         self.params = [
-            self.scale, # scale parameter
+            self.scale,  # scale parameter
             self.mu, self.alpha, self.delta
         ]
         self.grad_params = None
@@ -368,36 +374,39 @@ class HawkesInhibCTSM_scale(object):
         #
         self.norm_l2 = numpy.float32(0.0)
         for param in self.params:
-            self.norm_l2 += tensor.sum( param ** 2 )
+            self.norm_l2 += tensor.sum(param ** 2)
         self.term_reg = self.coef_l2 * self.norm_l2
         #
         #
     #
     #
+
     def soft_relu(self, x):
         # x is a symbolic tensor
         # tensor[(x == 0).nonzeros()]
         #v_max = numpy.float32(1e9)
-        y = tensor.log(numpy.float32(1.0)+tensor.exp(x) )
-        z = tensor.switch(x>=100.0, x, y)
+        y = tensor.log(numpy.float32(1.0)+tensor.exp(x))
+        z = tensor.switch(x >= 100.0, x, y)
         #a = tensor.switch(z>=v_max, v_max, z)
         #y[(x>=100.0).nonzeros()] = x[(x>=100.0).nonzeros()]
-        #np.finfo(np.float32).max
+        # np.finfo(np.float32).max
         return z
     #
     #
+
     def soft_relu_scale(self, x):
         # x is symbolic tensor
         # usually last dim is dim_process
         # but in this model, 0-th dim is dim_process
         # this is important !
-        x /= self.scale[:,None,None]
-        y = tensor.log(numpy.float32(1.0)+tensor.exp(x) )
-        z = tensor.switch(x>=100.0, x, y)
-        z *= self.scale[:,None,None]
+        x /= self.scale[:, None, None]
+        y = tensor.log(numpy.float32(1.0)+tensor.exp(x))
+        z = tensor.switch(x >= 100.0, x, y)
+        z *= self.scale[:, None, None]
         return z
     #
     #
+
     def compute_loss(
         self,
         seq_time_to_current, seq_type_event,
@@ -424,20 +433,21 @@ class HawkesInhibCTSM_scale(object):
         #
         seq_sims_mask : N * size_batch -- 1/0
         '''
-        print "computing loss function of Hawkes model ... "
+        print("computing loss function of Hawkes model ... ")
         # first compute the 3rd term in loss
         alpha_over_seq = self.alpha[
             :, seq_type_event
-        ] # dim_process * T * size_batch
+        ]  # dim_process * T * size_batch
         delta_over_seq = self.delta[
             :, seq_type_event
-        ] # dim_process * T * size_batch
+        ]  # dim_process * T * size_batch
         #
-        lambda_over_seq_sims_tilde = self.mu[:,None,None] + tensor.sum(
+        lambda_over_seq_sims_tilde = self.mu[:, None, None] + tensor.sum(
             (
-                seq_sims_mask_to_current[None,:,:,:] * (
-                    alpha_over_seq[:,None,:,:] * tensor.exp(
-                        -delta_over_seq[:,None,:,:] * seq_sims_time_to_current[None,:,:,:]
+                seq_sims_mask_to_current[None, :, :, :] * (
+                    alpha_over_seq[:, None, :, :] * tensor.exp(
+                        -delta_over_seq[:, None, :, :] *
+                        seq_sims_time_to_current[None, :, :, :]
                     )
                 )
             ), axis=2
@@ -474,15 +484,14 @@ class HawkesInhibCTSM_scale(object):
         # seq_mask_to_current : T * T * size_batch
         lambda_over_seq_tilde = self.mu[:, None, None] + tensor.sum(
             (
-                seq_mask_to_current[None,:,:,:]
+                seq_mask_to_current[None, :, :, :]
                 * (
-                    alpha_over_seq[:,None,:,:] * tensor.exp(
-                        -delta_over_seq[:,None,:,:]
-                        * seq_time_to_current[None,:,:,:]
+                    alpha_over_seq[:, None, :, :] * tensor.exp(
+                        -delta_over_seq[:, None, :, :]
+                        * seq_time_to_current[None, :, :, :]
                     )
                 )
-            )
-            , axis=2
+            ), axis=2
         )
         # dim_process * T * size_batch
         #
@@ -494,7 +503,7 @@ class HawkesInhibCTSM_scale(object):
         #
         lambda_sum_over_seq = tensor.sum(
             lambda_over_seq, axis=0
-        ) # T * size_batch
+        )  # T * size_batch
         # now we choose the right lambda for each step
         # by using seq_type_event : T * size_batch
         new_shape_0 = lambda_over_seq.shape[1]*lambda_over_seq.shape[2]
@@ -504,7 +513,7 @@ class HawkesInhibCTSM_scale(object):
         back_shape_1 = lambda_over_seq.shape[2]
         #
         lambda_target_over_seq = lambda_over_seq.transpose(
-            (1,2,0)
+            (1, 2, 0)
         ).reshape(
             (
                 new_shape_0, new_shape_1
@@ -562,8 +571,9 @@ class HawkesInhibCTSM_scale(object):
         #
     #
     #
+
     def save_model(self, file_save):
-        print "saving model ... "
+        print("saving model ... ")
         model_dict = {}
         for param in self.params:
             model_dict[param.name] = numpy.copy(
@@ -576,6 +586,8 @@ class HawkesInhibCTSM_scale(object):
 #
 #
 #
+
+
 class NeuralHawkesCTLSTM(object):
     '''
     This model uses:
@@ -585,12 +597,13 @@ class NeuralHawkesCTLSTM(object):
     Reduced version -- delta param is D * D, not D * D * K
     '''
     #
+
     def __init__(self, settings):
         self.size_batch = settings['size_batch']
         self.coef_l2 = settings['coef_l2']
         #
         #
-        print "initializing Neural Hawkes with Continuous-time LSTM ... "
+        print("initializing Neural Hawkes with Continuous-time LSTM ... ")
         if settings['path_pre_train'] == None:
             self.dim_process = settings['dim_process']
             self.dim_time = settings['dim_time']
@@ -646,7 +659,7 @@ class NeuralHawkesCTLSTM(object):
             )
             with open(path_pre_train, 'rb') as f:
                 model_pre_train = pickle.load(f)
-            #with open(settings['path_pre_train'], 'rb') as f:
+            # with open(settings['path_pre_train'], 'rb') as f:
             #    model_pre_train = pickle.load(f)
             self.dim_process = model_pre_train['dim_process']
             self.dim_model = model_pre_train['dim_model']
@@ -693,8 +706,8 @@ class NeuralHawkesCTLSTM(object):
         # alpha & delta, i-row j-col is the effect of j to i
         #
         self.params = [
-            #self.mu, #self.delta,
-            self.scale, # scale parameter
+            # self.mu, #self.delta,
+            self.scale,  # scale parameter
             self.W_alpha,
             self.Emb_event,
             self.W_recur, self.b_recur
@@ -711,7 +724,7 @@ class NeuralHawkesCTLSTM(object):
         #
         self.norm_l2 = numpy.float32(0.0)
         for param in self.params:
-            self.norm_l2 += tensor.sum( param ** 2 )
+            self.norm_l2 += tensor.sum(param ** 2)
         self.term_reg = self.coef_l2 * self.norm_l2
         #
         #
@@ -721,25 +734,27 @@ class NeuralHawkesCTLSTM(object):
         # x is a symbolic tensor
         # tensor[(x == 0).nonzeros()]
         #v_max = numpy.float32(1e9)
-        y = tensor.log(numpy.float32(1.0)+tensor.exp(x) )
-        z = tensor.switch(x>=100.0, x, y)
+        y = tensor.log(numpy.float32(1.0)+tensor.exp(x))
+        z = tensor.switch(x >= 100.0, x, y)
         #a = tensor.switch(z>=v_max, v_max, z)
         #y[(x>=100.0).nonzeros()] = x[(x>=100.0).nonzeros()]
-        #np.finfo(np.float32).max
+        # np.finfo(np.float32).max
         return z
     #
     #
+
     def soft_relu_scale(self, x):
         # x is symbolic tensor
         # last dim is dim_process
         # this is important !
         x /= self.scale
-        y = tensor.log(numpy.float32(1.0)+tensor.exp(x) )
-        z = tensor.switch(x>=100.0, x, y)
+        y = tensor.log(numpy.float32(1.0)+tensor.exp(x))
+        z = tensor.switch(x >= 100.0, x, y)
         z *= self.scale
         return z
     #
     #
+
     def rnn_unit(
         self,
         emb_event_im1, time_interval_im1,
@@ -769,10 +784,10 @@ class NeuralHawkesCTLSTM(object):
         decay_rate over ( t_{i-1}, t_i ]
         gate_output over ( t_{i-1}, t_i ]
         '''
-        #TODO: update LSTM state at t_{i-1}
+        # TODO: update LSTM state at t_{i-1}
         pre_transform = tensor.concatenate(
             [emb_event_im1, hidden_t_im1],
-            axis = 1
+            axis=1
         )
         post_transform = tensor.dot(
             pre_transform, self.W_recur
@@ -812,9 +827,10 @@ class NeuralHawkesCTLSTM(object):
             ]
         )
         # size : size_batch * dim_model
-        #TODO: decay cell memory
+        # TODO: decay cell memory
         cell_i = gate_forget * cell_t_im1 + gate_input * gate_pre_c
-        cell_i_target = gate_forget_target * cell_im1_target + gate_input_target * gate_pre_c
+        cell_i_target = gate_forget_target * \
+            cell_im1_target + gate_input_target * gate_pre_c
         #
         cell_t_i = cell_i_target + (
             cell_i - cell_i_target
@@ -824,19 +840,20 @@ class NeuralHawkesCTLSTM(object):
         hidden_t_i = gate_output * tensor.tanh(
             cell_t_i
         )
-        #TODO: get the hidden state right after this update, which is used to compute Hawkes params
+        # TODO: get the hidden state right after this update, which is used to compute Hawkes params
         hidden_i = gate_output * tensor.tanh(
             cell_i
         )
         return hidden_t_i, cell_t_i, cell_i_target, cell_i, decay_cell, gate_output
-        #return hidden_t_i, cell_t_i, cell_i_target, hidden_i, cell_i, decay_cell, gate_output
+        # return hidden_t_i, cell_t_i, cell_i_target, hidden_i, cell_i, decay_cell, gate_output
         #
     #
     #
+
     def compute_loss(
         self,
         seq_time_to_current,
-        seq_type_event, #seq_time_rep,
+        seq_type_event,  # seq_time_rep,
         seq_time_values,
         time_since_start_to_end,
         num_sims_start_to_end,
@@ -858,7 +875,8 @@ class NeuralHawkesCTLSTM(object):
         seq_sims_mask : N * size_batch -- 1/0
         Warning: There is overlap between seq_time_values and seq_time_to_current, so in this function, we happen not to use both. So we need to put on_unused_input='warn' in theano.function to avoid error message.
         '''
-        print "computing loss function of Neural Hawkes model with continuous-time LSTM ... "
+        print(
+            "computing loss function of Neural Hawkes model with continuous-time LSTM ... ")
         #
         # we first process the past history of events with LSTM
         seq_emb_event = self.Emb_event[seq_type_event, :]
@@ -895,8 +913,8 @@ class NeuralHawkesCTLSTM(object):
         seq_hidden_t, seq_cell_t : hidden and cell right BEFORE NEXT occurrence
         '''
         [seq_hidden_t, seq_cell_t, seq_cell_target, seq_cell, seq_decay_cell, seq_gate_output], _ = theano.scan(
-            fn = self.rnn_unit,
-            sequences = [
+            fn=self.rnn_unit,
+            sequences=[
                 dict(
                     input=seq_emb_event[:-1, :, :],
                     taps=[0]
@@ -906,13 +924,13 @@ class NeuralHawkesCTLSTM(object):
                     taps=[0]
                 )
             ],
-            outputs_info = [
+            outputs_info=[
                 dict(initial=initial_hidden_mat, taps=[-1]),
                 dict(initial=initial_cell_mat, taps=[-1]),
                 dict(initial=initial_cell_target_mat, taps=[-1]),
                 None, None, None
             ],
-            non_sequences = None
+            non_sequences=None
         )
         # size of outputs of this scan :
         # T * size_batch * dim_model
@@ -1029,7 +1047,7 @@ class NeuralHawkesCTLSTM(object):
         )
         # T * size_batch * dim_process
         lambda_sum_over_seq = tensor.sum(
-            lambda_over_seq, axis = 2
+            lambda_over_seq, axis=2
         )
         # T * size_batch
         new_shape_0 = lambda_over_seq.shape[0]*lambda_over_seq.shape[1]
@@ -1042,7 +1060,7 @@ class NeuralHawkesCTLSTM(object):
             (new_shape_0, new_shape_1)
         )[
             tensor.arange(new_shape_0),
-            seq_type_event[1:,:].flatten()
+            seq_type_event[1:, :].flatten()
         ].reshape(
             (back_shape_0, back_shape_1)
         )
@@ -1094,9 +1112,10 @@ class NeuralHawkesCTLSTM(object):
         #
     #
     #
+
     def compute_lambda(
         self,
-        seq_type_event, #seq_time_rep,
+        seq_type_event,  # seq_time_rep,
         seq_time_values,
         seq_sims_time_to_current,
         seq_sims_index_in_hidden,
@@ -1111,7 +1130,7 @@ class NeuralHawkesCTLSTM(object):
         seq_sims_index_in_hidden : N * size_batch -- int32
         seq_sims_mask : N * size_batch -- 1/0
         '''
-        print "computing loss function of Neural Hawkes model ... "
+        print("computing loss function of Neural Hawkes model ... ")
         #
         # we first process the past history of events with LSTM
         seq_emb_event = self.Emb_event[seq_type_event, :]
@@ -1138,8 +1157,8 @@ class NeuralHawkesCTLSTM(object):
         # a special BOS event,
         # to initialize the h and c
         [seq_hidden_t, seq_cell_t, seq_cell_target, seq_cell, seq_decay_cell, seq_gate_output], _ = theano.scan(
-            fn = self.rnn_unit,
-            sequences = [
+            fn=self.rnn_unit,
+            sequences=[
                 dict(
                     input=seq_emb_event[:-1, :, :],
                     taps=[0]
@@ -1149,13 +1168,13 @@ class NeuralHawkesCTLSTM(object):
                     taps=[0]
                 )
             ],
-            outputs_info = [
+            outputs_info=[
                 dict(initial=initial_hidden_mat, taps=[-1]),
                 dict(initial=initial_cell_mat, taps=[-1]),
                 dict(initial=initial_cell_target_mat, taps=[-1]),
                 None, None, None
             ],
-            non_sequences = None
+            non_sequences=None
         )
         #
         '''
@@ -1248,21 +1267,23 @@ class NeuralHawkesCTLSTM(object):
         '''
         this block is to compute intensity
         '''
-        self.lambda_samples = lambda_over_seq_sims.transpose((2,0,1)) * seq_sims_mask[None,:,:]
+        self.lambda_samples = lambda_over_seq_sims.transpose(
+            (2, 0, 1)) * seq_sims_mask[None, :, :]
         self.num_of_samples = tensor.sum(seq_sims_mask)
         #
         #
     #
     #
+
     def compute_prediction_loss(
         self,
-        seq_type_event, #seq_time_rep,
+        seq_type_event,  # seq_time_rep,
         seq_time_values,
         seq_mask,
         time_diffs
     ):
         #
-        print "computing predictions loss for neural Hawkes with continuous-time LSTM ... "
+        print("computing predictions loss for neural Hawkes with continuous-time LSTM ... ")
         seq_emb_event = self.Emb_event[seq_type_event, :]
         #
         initial_hidden_mat = tensor.outer(
@@ -1279,8 +1300,8 @@ class NeuralHawkesCTLSTM(object):
         # a special BOS event,
         # to initialize the h and c
         [seq_hidden_t, seq_cell_t, seq_cell_target, seq_cell, seq_decay_cell, seq_gate_output], _ = theano.scan(
-            fn = self.rnn_unit,
-            sequences = [
+            fn=self.rnn_unit,
+            sequences=[
                 dict(
                     input=seq_emb_event[:-1, :, :],
                     taps=[0]
@@ -1290,13 +1311,13 @@ class NeuralHawkesCTLSTM(object):
                     taps=[0]
                 )
             ],
-            outputs_info = [
+            outputs_info=[
                 dict(initial=initial_hidden_mat, taps=[-1]),
                 dict(initial=initial_cell_mat, taps=[-1]),
                 dict(initial=initial_cell_target_mat, taps=[-1]),
                 None, None, None
             ],
-            non_sequences = None
+            non_sequences=None
         )
         # seq_hidden_t : T * size_batch * dim_model
         seq_cell_with_time = seq_cell_target[
@@ -1320,14 +1341,14 @@ class NeuralHawkesCTLSTM(object):
                 :, :, :, None, :
             ] * self.W_alpha[
                 None, None, :, :, None
-            ], axis = 2
+            ], axis=2
         )
         # T * size_batch * dim_process * M
         # each time stamp, each seq in batch
         # each process, each simulation for prediction
         lambda_over_seq = self.soft_relu_scale(
-            lambda_over_seq_tilde.dimshuffle(3,0,1,2)
-        ).dimshuffle(1,2,3,0)
+            lambda_over_seq_tilde.dimshuffle(3, 0, 1, 2)
+        ).dimshuffle(1, 2, 3, 0)
         #
         # T * size_batch * dim_process * M
         lambda_sum_over_seq = tensor.sum(
@@ -1344,7 +1365,7 @@ class NeuralHawkesCTLSTM(object):
         term_2 = tensor.exp(
             (
                 -1.0 * tensor.extra_ops.cumsum(
-                    lambda_sum_over_seq, axis = 2
+                    lambda_sum_over_seq, axis=2
                 ) / cum_num[None, None, :]
             ) * time_diffs[
                 None, None, :
@@ -1357,7 +1378,7 @@ class NeuralHawkesCTLSTM(object):
         # T * size_batch * M
         time_prediction = tensor.mean(
             term_1[None, None, :] * density,
-            axis = 2
+            axis=2
         ) * time_diffs[-1]
         # T * size_batch
         lambda_over_seq_over_sims = lambda_over_seq[
@@ -1369,7 +1390,7 @@ class NeuralHawkesCTLSTM(object):
         ]
         # T * size_batch * dim_process * M
         prob_over_seq_over_type = tensor.mean(
-            lambda_over_seq_over_sims, axis = 3
+            lambda_over_seq_over_sims, axis=3
         ) * time_diffs[-1]
         # T * size_batch * dim_process
         prob_over_seq_over_type /= tensor.sum(
@@ -1378,9 +1399,9 @@ class NeuralHawkesCTLSTM(object):
             keepdims=True
         )
         # T * size_batch * dim_process
-        #type_prediction = tensor.argmax(
+        # type_prediction = tensor.argmax(
         #    prob_over_seq_over_type, axis = 2
-        #)
+        # )
         # T * size_batch
         # Now we have :
         # time_prediction, type_prediction, seq_mask
@@ -1408,13 +1429,13 @@ class NeuralHawkesCTLSTM(object):
         self.log_likelihood_type_predict = tensor.sum(
             log_prob_over_seq
         )
-        #diff_type = tensor.abs_(
+        # diff_type = tensor.abs_(
         #    target_type - type_prediction
-        #) * seq_mask
-        #diff_type = tensor.switch(
+        # ) * seq_mask
+        # diff_type = tensor.switch(
         #    diff_type >= numpy.float32(0.5),
         #    numpy.float32(1.0), numpy.float32(0.0)
-        #)
+        # )
         #
         #self.num_of_errors = tensor.sum(diff_type)
         # Time
@@ -1424,10 +1445,10 @@ class NeuralHawkesCTLSTM(object):
         diff_time *= seq_mask
         self.square_errors = tensor.sum(diff_time)
         self.num_of_events = tensor.sum(seq_mask)
-        #TODO: Hamming loss for prediction checking
+        # TODO: Hamming loss for prediction checking
         #
         type_prediction = tensor.argmax(
-            prob_over_seq_over_type, axis = 2
+            prob_over_seq_over_type, axis=2
         )
         diff_type = tensor.abs_(
             target_type - type_prediction
@@ -1438,7 +1459,8 @@ class NeuralHawkesCTLSTM(object):
         )
         self.num_of_errors = tensor.sum(diff_type)
         #
-        self.cost_to_optimize = -self.log_likelihood_type_predict / self.num_of_events + self.square_errors / self.num_of_events + self.term_reg
+        self.cost_to_optimize = -self.log_likelihood_type_predict / \
+            self.num_of_events + self.square_errors / self.num_of_events + self.term_reg
         #self.cost_to_optimize = -self.log_likelihood_type_predict + self.term_reg
         self.grad_params = tensor.grad(
             self.cost_to_optimize, self.params
@@ -1455,7 +1477,8 @@ class NeuralHawkesCTLSTM(object):
     #
     #
     #
-    #TODO: memory efficient version of prediction loss
+    # TODO: memory efficient version of prediction loss
+
     def predict_each_step(
         self,
         cell_target, cell,
@@ -1485,7 +1508,7 @@ class NeuralHawkesCTLSTM(object):
                 :, :, None, :
             ] * self.W_alpha[
                 None, :, :, None
-            ], axis = 1
+            ], axis=1
         )
         # size_batch * dim_process * M
         lambda_each_step = self.soft_relu_scale(
@@ -1495,7 +1518,7 @@ class NeuralHawkesCTLSTM(object):
             lambda_each_step, axis=1
         )
         # size_batch * M
-        #TODO: compute integral
+        # TODO: compute integral
         term_1 = time_diffs
         cum_num = tensor.arange(
             time_diffs.shape[0]+numpy.int32(1)
@@ -1535,6 +1558,7 @@ class NeuralHawkesCTLSTM(object):
         return prob_over_type, time_prediction_each_step
     #
     #
+
     def compute_prediction_loss_lessmem(
         self,
         seq_type_event,
@@ -1543,8 +1567,8 @@ class NeuralHawkesCTLSTM(object):
         time_diffs
     ):
         #
-        print "computing predictions loss of neural Hawkes with continuous-time LSTM ... "
-        print "memory efficient version ... "
+        print("computing predictions loss of neural Hawkes with continuous-time LSTM ... ")
+        print("memory efficient version ... ")
         seq_emb_event = self.Emb_event[seq_type_event, :]
         #
         initial_hidden_mat = tensor.outer(
@@ -1561,8 +1585,8 @@ class NeuralHawkesCTLSTM(object):
         # a special BOS event,
         # to initialize the h and c
         [seq_hidden_t, seq_cell_t, seq_cell_target, seq_cell, seq_decay_cell, seq_gate_output], _ = theano.scan(
-            fn = self.rnn_unit,
-            sequences = [
+            fn=self.rnn_unit,
+            sequences=[
                 dict(
                     input=seq_emb_event[:-1, :, :],
                     taps=[0]
@@ -1572,28 +1596,28 @@ class NeuralHawkesCTLSTM(object):
                     taps=[0]
                 )
             ],
-            outputs_info = [
+            outputs_info=[
                 dict(initial=initial_hidden_mat, taps=[-1]),
                 dict(initial=initial_cell_mat, taps=[-1]),
                 dict(initial=initial_cell_target_mat, taps=[-1]),
                 None, None, None
             ],
-            non_sequences = None
+            non_sequences=None
         )
         #
-        #TODO: predict time and type for each step
+        # TODO: predict time and type for each step
         [prob_over_seq_over_type, time_prediction], _ = theano.scan(
-            fn = self.predict_each_step,
-            sequences = [
+            fn=self.predict_each_step,
+            sequences=[
                 dict(input=seq_cell_target, taps=[0]),
                 dict(input=seq_cell, taps=[0]),
                 dict(input=seq_decay_cell, taps=[0]),
                 dict(input=seq_gate_output, taps=[0])
             ],
-            outputs_info = [
+            outputs_info=[
                 None, None
             ],
-            non_sequences = time_diffs
+            non_sequences=time_diffs
         )
         #
         target_type = seq_type_event[1:, :]
@@ -1627,10 +1651,10 @@ class NeuralHawkesCTLSTM(object):
         diff_time *= seq_mask
         self.square_errors = tensor.sum(diff_time)
         self.num_of_events = tensor.sum(seq_mask)
-        #TODO: Hamming loss for prediction checking
+        # TODO: Hamming loss for prediction checking
         #
         type_prediction = tensor.argmax(
-            prob_over_seq_over_type, axis = 2
+            prob_over_seq_over_type, axis=2
         )
         diff_type = tensor.abs_(
             target_type - type_prediction
@@ -1641,7 +1665,8 @@ class NeuralHawkesCTLSTM(object):
         )
         self.num_of_errors = tensor.sum(diff_type)
         #
-        self.cost_to_optimize = -self.log_likelihood_type_predict / self.num_of_events + self.square_errors / self.num_of_events + self.term_reg
+        self.cost_to_optimize = -self.log_likelihood_type_predict / \
+            self.num_of_events + self.square_errors / self.num_of_events + self.term_reg
         #self.cost_to_optimize = -self.log_likelihood_type_predict + self.term_reg
         self.grad_params = tensor.grad(
             self.cost_to_optimize, self.params
@@ -1658,8 +1683,9 @@ class NeuralHawkesCTLSTM(object):
     #
     #
     #
+
     def get_model(self):
-        print "getting model ... "
+        print("getting model ... ")
         model_dict = {}
         for param in self.params:
             model_dict[param.name] = numpy.copy(
@@ -1672,9 +1698,10 @@ class NeuralHawkesCTLSTM(object):
         #
     #
     #
+
     def save_model(self, file_save):
         model_dict = self.get_model()
-        print "saving model ... "
+        print("saving model ... ")
         with open(file_save, 'wb') as f:
             pickle.dump(model_dict, f)
         #
@@ -1698,12 +1725,14 @@ class NeuralHawkesCTLSTM(object):
 #
 #
 #
+
+
 class HawkesInhibCTSM(object):
     #
     def __init__(self, settings):
         self.size_batch = settings['size_batch']
         self.coef_l2 = settings['coef_l2']
-        print "initializing Hawkes CTSM ... "
+        print("initializing Hawkes CTSM ... ")
         if settings['path_pre_train'] == None:
             self.dim_process = settings['dim_process']
             # initialize variables
@@ -1737,7 +1766,7 @@ class HawkesInhibCTSM(object):
             )
             with open(path_pre_train, 'rb') as f:
                 model_pre_train = pickle.load(f)
-            #with open(settings['path_pre_train'], 'rb') as f:
+            # with open(settings['path_pre_train'], 'rb') as f:
             #    model_pre_train = pickle.load(f)
             self.dim_process = model_pre_train['dim_process']
             self.mu = theano.shared(
@@ -1765,7 +1794,7 @@ class HawkesInhibCTSM(object):
         #
         self.norm_l2 = numpy.float32(0.0)
         for param in self.params:
-            self.norm_l2 += tensor.sum( param ** 2 )
+            self.norm_l2 += tensor.sum(param ** 2)
         self.term_reg = self.coef_l2 * self.norm_l2
         #
         #
@@ -1775,6 +1804,7 @@ class HawkesInhibCTSM(object):
         # x is a symbolic tensor
         return tensor.log(numpy.float32(1.0)+tensor.exp(x))
     #
+
     def compute_loss(
         self,
         seq_time_to_current, seq_type_event,
@@ -1801,24 +1831,25 @@ class HawkesInhibCTSM(object):
         #
         seq_sims_mask : N * size_batch -- 1/0
         '''
-        print "computing loss function of Hawkes model ... "
+        print("computing loss function of Hawkes model ... ")
         # first compute the 3rd term in loss
         alpha_over_seq = self.alpha[
             :, seq_type_event
-        ] # dim_process * T * size_batch
+        ]  # dim_process * T * size_batch
         delta_over_seq = self.delta[
             :, seq_type_event
-        ] # dim_process * T * size_batch
+        ]  # dim_process * T * size_batch
         #
-        lambda_over_seq_sims_tilde = self.mu[:,None,None] + tensor.sum(
+        lambda_over_seq_sims_tilde = self.mu[:, None, None] + tensor.sum(
             (
-                seq_sims_mask_to_current[None,:,:,:] * (
-                    alpha_over_seq[:,None,:,:] * tensor.exp(
-                        -delta_over_seq[:,None,:,:] * seq_sims_time_to_current[None,:,:,:]
+                seq_sims_mask_to_current[None, :, :, :] * (
+                    alpha_over_seq[:, None, :, :] * tensor.exp(
+                        -delta_over_seq[:, None, :, :] *
+                        seq_sims_time_to_current[None, :, :, :]
                     )
                 )
             ), axis=2
-        ) # dim_process * N * size_batch
+        )  # dim_process * N * size_batch
         #
         lambda_over_seq_sims = tensor.log(
             numpy.float32(1.0) + tensor.exp(
@@ -1851,26 +1882,25 @@ class HawkesInhibCTSM(object):
         # seq_mask_to_current : T * T * size_batch
         lambda_over_seq_tilde = self.mu[:, None, None] + tensor.sum(
             (
-                seq_mask_to_current[None,:,:,:]
+                seq_mask_to_current[None, :, :, :]
                 * (
-                    alpha_over_seq[:,None,:,:] * tensor.exp(
-                        -delta_over_seq[:,None,:,:]
-                        * seq_time_to_current[None,:,:,:]
+                    alpha_over_seq[:, None, :, :] * tensor.exp(
+                        -delta_over_seq[:, None, :, :]
+                        * seq_time_to_current[None, :, :, :]
                     )
                 )
-            )
-            , axis=2
-        ) # dim_process * T * size_batch
+            ), axis=2
+        )  # dim_process * T * size_batch
         #
         lambda_over_seq = tensor.log(
             numpy.float32(1.0) + tensor.exp(
                 lambda_over_seq_tilde
             )
-        ) # dim_process * T * size_batch
+        )  # dim_process * T * size_batch
         #
         lambda_sum_over_seq = tensor.sum(
             lambda_over_seq, axis=0
-        ) # T * size_batch
+        )  # T * size_batch
         # now we choose the right lambda for each step
         # by using seq_type_event : T * size_batch
         new_shape_0 = lambda_over_seq.shape[1]*lambda_over_seq.shape[2]
@@ -1880,7 +1910,7 @@ class HawkesInhibCTSM(object):
         back_shape_1 = lambda_over_seq.shape[2]
         #
         lambda_target_over_seq = lambda_over_seq.transpose(
-            (1,2,0)
+            (1, 2, 0)
         ).reshape(
             (
                 new_shape_0, new_shape_1
@@ -1938,8 +1968,9 @@ class HawkesInhibCTSM(object):
         #
     #
     #
+
     def save_model(self, file_save):
-        print "saving model ... "
+        print( "saving model ... ")
         model_dict = {}
         for param in self.params:
             model_dict[param.name] = numpy.copy(
@@ -1952,6 +1983,8 @@ class HawkesInhibCTSM(object):
 #
 #
 #
+
+
 class NeuralHawkesCTSM(object):
     #
     #
@@ -1960,7 +1993,7 @@ class NeuralHawkesCTSM(object):
         self.coef_l2 = settings['coef_l2']
         #
         #
-        print "initializing Neural Hawkes CTSM ... "
+        print("initializing Neural Hawkes CTSM ... ")
         if settings['path_pre_train'] == None:
             self.dim_process = settings['dim_process']
             self.dim_time = settings['dim_time']
@@ -2019,7 +2052,7 @@ class NeuralHawkesCTSM(object):
             )
             with open(path_pre_train, 'rb') as f:
                 model_pre_train = pickle.load(f)
-            #with open(settings['path_pre_train'], 'rb') as f:
+            # with open(settings['path_pre_train'], 'rb') as f:
             #    model_pre_train = pickle.load(f)
             self.dim_process = model_pre_train['dim_process']
             self.dim_model = model_pre_train['dim_model']
@@ -2081,7 +2114,7 @@ class NeuralHawkesCTSM(object):
         #
         self.norm_l2 = numpy.float32(0.0)
         for param in self.params:
-            self.norm_l2 += tensor.sum( param ** 2 )
+            self.norm_l2 += tensor.sum(param ** 2)
         self.term_reg = self.coef_l2 * self.norm_l2
         #
         #
@@ -2092,13 +2125,14 @@ class NeuralHawkesCTSM(object):
         return tensor.log(numpy.float32(1.0)+tensor.exp(x))
     #
     #
+
     def rnn_unit(
         self, emb_event_t, emb_time_t,
         hidden_tm1, cell_tm1
     ):
         pre_transform = tensor.concatenate(
             [emb_event_t, emb_time_t, hidden_tm1],
-            axis = 1
+            axis=1
         )
         post_transform = tensor.dot(
             pre_transform, self.W_recur
@@ -2124,6 +2158,7 @@ class NeuralHawkesCTSM(object):
         return hidden_t, cell_t
     #
     #
+
     def compute_loss(
         self,
         seq_time_to_current,
@@ -2148,7 +2183,7 @@ class NeuralHawkesCTSM(object):
         seq_sims_index_in_hidden : N * size_batch -- int32
         seq_sims_mask : N * size_batch -- 1/0
         '''
-        print "computing loss function of Neural Hawkes model ... "
+        print("computing loss function of Neural Hawkes model ... ")
         #
         # we first process the past history of events with LSTM
         seq_emb_event = self.Emb_event[seq_type_event, :]
@@ -2162,7 +2197,7 @@ class NeuralHawkesCTSM(object):
         '''
         # T * size_batch * dim_model
         seq_emb_time = tensor.tensordot(
-            seq_time_rep, self.Emb_time, (2,0)
+            seq_time_rep, self.Emb_time, (2, 0)
         )
         #
         initial_hidden_mat = tensor.outer(
@@ -2176,16 +2211,16 @@ class NeuralHawkesCTSM(object):
         # a special BOS event,
         # to initialize the h and c
         [seq_hidden, seq_cell], _ = theano.scan(
-            fn = self.rnn_unit,
-            sequences = [
+            fn=self.rnn_unit,
+            sequences=[
                 dict(input=seq_emb_event, taps=[0]),
                 dict(input=seq_emb_time, taps=[0])
             ],
-            outputs_info = [
+            outputs_info=[
                 dict(initial=initial_hidden_mat, taps=[-1]),
                 dict(initial=initial_cell_mat, taps=[-1])
             ],
-            non_sequences = None
+            non_sequences=None
         )
         #
         seq_hidden_for_lambda = seq_hidden[:-1, :, :]
@@ -2246,7 +2281,7 @@ class NeuralHawkesCTSM(object):
             seq_sims_hidden_with_time * self.W_alpha[
                 None, None, :, :
             ],
-            axis = 2
+            axis=2
         )
         # N * size_batch * dim_process
         lambda_over_seq_sims = self.soft_relu(
@@ -2281,7 +2316,7 @@ class NeuralHawkesCTSM(object):
             seq_hidden_with_time * self.W_alpha[
                 None, None, :, :
             ],
-            axis = 2
+            axis=2
         )
         # T * size_batch * dim_process
         lambda_over_seq = self.soft_relu(
@@ -2289,7 +2324,7 @@ class NeuralHawkesCTSM(object):
         )
         # T * size_batch * dim_process
         lambda_sum_over_seq = tensor.sum(
-            lambda_over_seq, axis = 2
+            lambda_over_seq, axis=2
         )
         # T * size_batch
         #
@@ -2303,7 +2338,7 @@ class NeuralHawkesCTSM(object):
             (new_shape_0, new_shape_1)
         )[
             tensor.arange(new_shape_0),
-            seq_type_event[1:,:].flatten()
+            seq_type_event[1:, :].flatten()
         ].reshape(
             (back_shape_0, back_shape_1)
         )
@@ -2354,8 +2389,9 @@ class NeuralHawkesCTSM(object):
         #
     #
     #
+
     def save_model(self, file_save):
-        print "saving model ... "
+        print("saving model ... ")
         model_dict = {}
         for param in self.params:
             model_dict[param.name] = numpy.copy(
@@ -2369,6 +2405,8 @@ class NeuralHawkesCTSM(object):
         #
 #
 #
+
+
 class GeneralizedNeuralHawkesCTSM(object):
     #
     def __init__(self, settings):
@@ -2376,7 +2414,7 @@ class GeneralizedNeuralHawkesCTSM(object):
         self.coef_l2 = settings['coef_l2']
         #
         #
-        print "initializing Generalized Neural Hawkes CTSM ... "
+        print("initializing Generalized Neural Hawkes CTSM ... ")
         if settings['path_pre_train'] == None:
             self.dim_process = settings['dim_process']
             self.dim_time = settings['dim_time']
@@ -2395,24 +2433,24 @@ class GeneralizedNeuralHawkesCTSM(object):
             this order may be different from that of Hawkes
             so we need to be careful when interpreting
             '''
-            #self.delta = theano.shared(
+            # self.delta = theano.shared(
             #    numpy.ones(
             #        (self.dim_model, self.dim_process),
             #        dtype=dtype
             #    ), name='delta'
-            #)
+            # )
             #
             self.W_delta = theano.shared(
                 numpy.float32(
                     numpy.random.normal(
-                        loc = 0.0, scale = 0.1,
-                        size = (
+                        loc=0.0, scale=0.1,
+                        size=(
                             self.dim_model,
                             self.dim_model,
                             self.dim_process
                         )
                     )
-                ), name = 'W_delta'
+                ), name='W_delta'
             )
             # the 0-th axis -- self.dim_model
             # is for dot product with hidden units
@@ -2452,7 +2490,7 @@ class GeneralizedNeuralHawkesCTSM(object):
             )
             with open(path_pre_train, 'rb') as f:
                 model_pre_train = pickle.load(f)
-            #with open(settings['path_pre_train'], 'rb') as f:
+            # with open(settings['path_pre_train'], 'rb') as f:
             #    model_pre_train = pickle.load(f)
             self.dim_process = model_pre_train['dim_process']
             self.dim_model = model_pre_train['dim_model']
@@ -2461,9 +2499,9 @@ class GeneralizedNeuralHawkesCTSM(object):
             self.mu = theano.shared(
                 model_pre_train['mu'], name='mu'
             )
-            #self.delta = theano.shared(
+            # self.delta = theano.shared(
             #    model_pre_train['delta'], name='delta'
-            #)
+            # )
             self.W_delta = theano.shared(
                 model_pre_train['W_delta'], name='W_delta'
             )
@@ -2501,7 +2539,7 @@ class GeneralizedNeuralHawkesCTSM(object):
         # alpha & delta, i-row j-col is the effect of j to i
         #
         self.params = [
-            self.mu, #self.delta,
+            self.mu,  # self.delta,
             self.W_delta, self.W_alpha,
             self.Emb_event, self.Emb_time,
             self.W_recur, self.b_recur
@@ -2517,7 +2555,7 @@ class GeneralizedNeuralHawkesCTSM(object):
         #
         self.norm_l2 = numpy.float32(0.0)
         for param in self.params:
-            self.norm_l2 += tensor.sum( param ** 2 )
+            self.norm_l2 += tensor.sum(param ** 2)
         self.term_reg = self.coef_l2 * self.norm_l2
         #
         #
@@ -2527,21 +2565,22 @@ class GeneralizedNeuralHawkesCTSM(object):
         # x is a symbolic tensor
         # tensor[(x == 0).nonzeros()]
         #v_max = numpy.float32(1e9)
-        y = tensor.log(numpy.float32(1.0)+tensor.exp(x) )
-        z = tensor.switch(x>=100.0, x, y)
+        y = tensor.log(numpy.float32(1.0)+tensor.exp(x))
+        z = tensor.switch(x >= 100.0, x, y)
         #a = tensor.switch(z>=v_max, v_max, z)
         #y[(x>=100.0).nonzeros()] = x[(x>=100.0).nonzeros()]
-        #np.finfo(np.float32).max
+        # np.finfo(np.float32).max
         return z
     #
     #
+
     def rnn_unit(
         self, emb_event_t, emb_time_t,
         hidden_tm1, cell_tm1
     ):
         pre_transform = tensor.concatenate(
             [emb_event_t, emb_time_t, hidden_tm1],
-            axis = 1
+            axis=1
         )
         post_transform = tensor.dot(
             pre_transform, self.W_recur
@@ -2567,6 +2606,7 @@ class GeneralizedNeuralHawkesCTSM(object):
         return hidden_t, cell_t
     #
     #
+
     def compute_loss(
         self,
         seq_time_to_current,
@@ -2591,7 +2631,7 @@ class GeneralizedNeuralHawkesCTSM(object):
         seq_sims_index_in_hidden : N * size_batch -- int32
         seq_sims_mask : N * size_batch -- 1/0
         '''
-        print "computing loss function of Neural Hawkes model ... "
+        print("computing loss function of Neural Hawkes model ... ")
         #
         # we first process the past history of events with LSTM
         seq_emb_event = self.Emb_event[seq_type_event, :]
@@ -2605,7 +2645,7 @@ class GeneralizedNeuralHawkesCTSM(object):
         '''
         # T * size_batch * dim_model
         seq_emb_time = tensor.tensordot(
-            seq_time_rep, self.Emb_time, (2,0)
+            seq_time_rep, self.Emb_time, (2, 0)
         )
         #
         initial_hidden_mat = tensor.outer(
@@ -2619,16 +2659,16 @@ class GeneralizedNeuralHawkesCTSM(object):
         # a special BOS event,
         # to initialize the h and c
         [seq_hidden, seq_cell], _ = theano.scan(
-            fn = self.rnn_unit,
-            sequences = [
+            fn=self.rnn_unit,
+            sequences=[
                 dict(input=seq_emb_event, taps=[0]),
                 dict(input=seq_emb_time, taps=[0])
             ],
-            outputs_info = [
+            outputs_info=[
                 dict(initial=initial_hidden_mat, taps=[-1]),
                 dict(initial=initial_cell_mat, taps=[-1])
             ],
-            non_sequences = None
+            non_sequences=None
         )
         #
         seq_hidden_for_lambda = seq_hidden[:-1, :, :]
@@ -2677,7 +2717,7 @@ class GeneralizedNeuralHawkesCTSM(object):
         #
         delta_for_sims = self.soft_relu(
             tensor.tensordot(
-                seq_hidden_for_sims, self.W_delta, (2,0)
+                seq_hidden_for_sims, self.W_delta, (2, 0)
             )
         )
         #
@@ -2697,7 +2737,7 @@ class GeneralizedNeuralHawkesCTSM(object):
             seq_sims_hidden_with_time * self.W_alpha[
                 None, None, :, :
             ],
-            axis = 2
+            axis=2
         )
         # N * size_batch * dim_process
         lambda_over_seq_sims = self.soft_relu(
@@ -2722,7 +2762,7 @@ class GeneralizedNeuralHawkesCTSM(object):
         #
         delta_for_lambda = self.soft_relu(
             tensor.tensordot(
-                seq_hidden_for_lambda, self.W_delta, (2,0)
+                seq_hidden_for_lambda, self.W_delta, (2, 0)
             )
         )
         # T * size_batch * dim_model * dim_process
@@ -2739,7 +2779,7 @@ class GeneralizedNeuralHawkesCTSM(object):
             seq_hidden_with_time * self.W_alpha[
                 None, None, :, :
             ],
-            axis = 2
+            axis=2
         )
         # T * size_batch * dim_process
         lambda_over_seq = self.soft_relu(
@@ -2747,7 +2787,7 @@ class GeneralizedNeuralHawkesCTSM(object):
         )
         # T * size_batch * dim_process
         lambda_sum_over_seq = tensor.sum(
-            lambda_over_seq, axis = 2
+            lambda_over_seq, axis=2
         )
         # T * size_batch
         #
@@ -2761,7 +2801,7 @@ class GeneralizedNeuralHawkesCTSM(object):
             (new_shape_0, new_shape_1)
         )[
             tensor.arange(new_shape_0),
-            seq_type_event[1:,:].flatten()
+            seq_type_event[1:, :].flatten()
         ].reshape(
             (back_shape_0, back_shape_1)
         )
@@ -2812,8 +2852,9 @@ class GeneralizedNeuralHawkesCTSM(object):
         #
     #
     #
+
     def save_model(self, file_save):
-        print "saving model ... "
+        print("saving model ... ")
         model_dict = {}
         for param in self.params:
             model_dict[param.name] = numpy.copy(
@@ -2827,26 +2868,28 @@ class GeneralizedNeuralHawkesCTSM(object):
         #
 #
 #
+
+
 class NeuralHawkesAdaptiveBaseCTSM(object):
-    #TODO: the base rate is adaptive
+    # TODO: the base rate is adaptive
     #
     def __init__(self, settings):
         self.size_batch = settings['size_batch']
         self.coef_l2 = settings['coef_l2']
         #
         #
-        print "initializing Generalized Neural Hawkes with Adaptive Base Rate CTSM ... "
+        print("initializing Generalized Neural Hawkes with Adaptive Base Rate CTSM ... ")
         if settings['path_pre_train'] == None:
             self.dim_process = settings['dim_process']
             self.dim_time = settings['dim_time']
             # the dimension of time representations
             self.dim_model = settings['dim_model']
             # initialize variables
-            #self.mu = theano.shared(
+            # self.mu = theano.shared(
             #    numpy.ones(
             #        (self.dim_process,), dtype=dtype
             #    ), name='mu'
-            #)
+            # )
             '''
             we need to notice that: in these matrices of D * K
             the (i, j) entry is the effect of i-th dimension
@@ -2854,36 +2897,36 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
             this order may be different from that of Hawkes
             so we need to be careful when interpreting
             '''
-            #self.delta = theano.shared(
+            # self.delta = theano.shared(
             #    numpy.ones(
             #        (self.dim_model, self.dim_process),
             #        dtype=dtype
             #    ), name='delta'
-            #)
+            # )
             #
             self.W_mu = theano.shared(
                 numpy.float32(
                     numpy.random.normal(
-                        loc = 0.0, scale = 0.1,
-                        size = (
+                        loc=0.0, scale=0.1,
+                        size=(
                             self.dim_model, self.dim_process
                         )
                     )
-                ), name = 'W_mu'
+                ), name='W_mu'
             )
             #
             #
             self.W_delta = theano.shared(
                 numpy.float32(
                     numpy.random.normal(
-                        loc = 0.0, scale = 0.1,
-                        size = (
+                        loc=0.0, scale=0.1,
+                        size=(
                             self.dim_model,
                             self.dim_model,
                             self.dim_process
                         )
                     )
-                ), name = 'W_delta'
+                ), name='W_delta'
             )
             # the 0-th axis -- self.dim_model
             # is for dot product with hidden units
@@ -2923,7 +2966,7 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
             )
             with open(path_pre_train, 'rb') as f:
                 model_pre_train = pickle.load(f)
-            #with open(settings['path_pre_train'], 'rb') as f:
+            # with open(settings['path_pre_train'], 'rb') as f:
             #    model_pre_train = pickle.load(f)
             self.dim_process = model_pre_train['dim_process']
             self.dim_model = model_pre_train['dim_model']
@@ -2932,9 +2975,9 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
             self.W_mu = theano.shared(
                 model_pre_train['W_mu'], name='W_mu'
             )
-            #self.delta = theano.shared(
+            # self.delta = theano.shared(
             #    model_pre_train['delta'], name='delta'
-            #)
+            # )
             self.W_delta = theano.shared(
                 model_pre_train['W_delta'], name='W_delta'
             )
@@ -2972,7 +3015,7 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
         # alpha & delta, i-row j-col is the effect of j to i
         #
         self.params = [
-            #self.mu, #self.delta,
+            # self.mu, #self.delta,
             self.W_mu, self.W_delta, self.W_alpha,
             self.Emb_event, self.Emb_time,
             self.W_recur, self.b_recur
@@ -2988,7 +3031,7 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
         #
         self.norm_l2 = numpy.float32(0.0)
         for param in self.params:
-            self.norm_l2 += tensor.sum( param ** 2 )
+            self.norm_l2 += tensor.sum(param ** 2)
         self.term_reg = self.coef_l2 * self.norm_l2
         #
         #
@@ -2999,13 +3042,14 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
         return tensor.log(numpy.float32(1.0)+tensor.exp(x))
     #
     #
+
     def rnn_unit(
         self, emb_event_t, emb_time_t,
         hidden_tm1, cell_tm1
     ):
         pre_transform = tensor.concatenate(
             [emb_event_t, emb_time_t, hidden_tm1],
-            axis = 1
+            axis=1
         )
         post_transform = tensor.dot(
             pre_transform, self.W_recur
@@ -3031,6 +3075,7 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
         return hidden_t, cell_t
     #
     #
+
     def compute_loss(
         self,
         seq_time_to_current,
@@ -3055,7 +3100,7 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
         seq_sims_index_in_hidden : N * size_batch -- int32
         seq_sims_mask : N * size_batch -- 1/0
         '''
-        print "computing loss function of Neural Hawkes model ... "
+        print("computing loss function of Neural Hawkes model ... ")
         #
         # we first process the past history of events with LSTM
         seq_emb_event = self.Emb_event[seq_type_event, :]
@@ -3069,7 +3114,7 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
         '''
         # T * size_batch * dim_model
         seq_emb_time = tensor.tensordot(
-            seq_time_rep, self.Emb_time, (2,0)
+            seq_time_rep, self.Emb_time, (2, 0)
         )
         #
         initial_hidden_mat = tensor.outer(
@@ -3083,16 +3128,16 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
         # a special BOS event,
         # to initialize the h and c
         [seq_hidden, seq_cell], _ = theano.scan(
-            fn = self.rnn_unit,
-            sequences = [
+            fn=self.rnn_unit,
+            sequences=[
                 dict(input=seq_emb_event, taps=[0]),
                 dict(input=seq_emb_time, taps=[0])
             ],
-            outputs_info = [
+            outputs_info=[
                 dict(initial=initial_hidden_mat, taps=[-1]),
                 dict(initial=initial_cell_mat, taps=[-1])
             ],
-            non_sequences = None
+            non_sequences=None
         )
         #
         seq_hidden_for_lambda = seq_hidden[:-1, :, :]
@@ -3141,7 +3186,7 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
         #
         delta_for_sims = self.soft_relu(
             tensor.tensordot(
-                seq_hidden_for_sims, self.W_delta, (2,0)
+                seq_hidden_for_sims, self.W_delta, (2, 0)
             )
         )
         #
@@ -3158,7 +3203,7 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
         # N * size_batch * dim_model * dim_process
         # self.W_alpha : dim_model * dim_process
         mu_for_sims = tensor.tensordot(
-            seq_hidden_for_sims, self.W_mu, (2,0)
+            seq_hidden_for_sims, self.W_mu, (2, 0)
         )
         # N * size_batch * dim_process
         #
@@ -3166,7 +3211,7 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
             seq_sims_hidden_with_time * self.W_alpha[
                 None, None, :, :
             ],
-            axis = 2
+            axis=2
         )
         # N * size_batch * dim_process
         lambda_over_seq_sims = self.soft_relu(
@@ -3191,7 +3236,7 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
         #
         delta_for_lambda = self.soft_relu(
             tensor.tensordot(
-                seq_hidden_for_lambda, self.W_delta, (2,0)
+                seq_hidden_for_lambda, self.W_delta, (2, 0)
             )
         )
         # T * size_batch * dim_model * dim_process
@@ -3206,7 +3251,7 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
         # T * size_batch * dim_model * dim_process
         #
         mu_for_lambda = tensor.tensordot(
-            seq_hidden_for_lambda, self.W_mu, (2,0)
+            seq_hidden_for_lambda, self.W_mu, (2, 0)
         )
         # T * size_batch * dim_process
         #
@@ -3214,7 +3259,7 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
             seq_hidden_with_time * self.W_alpha[
                 None, None, :, :
             ],
-            axis = 2
+            axis=2
         )
         # T * size_batch * dim_process
         lambda_over_seq = self.soft_relu(
@@ -3222,7 +3267,7 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
         )
         # T * size_batch * dim_process
         lambda_sum_over_seq = tensor.sum(
-            lambda_over_seq, axis = 2
+            lambda_over_seq, axis=2
         )
         # T * size_batch
         #
@@ -3236,7 +3281,7 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
             (new_shape_0, new_shape_1)
         )[
             tensor.arange(new_shape_0),
-            seq_type_event[1:,:].flatten()
+            seq_type_event[1:, :].flatten()
         ].reshape(
             (back_shape_0, back_shape_1)
         )
@@ -3287,8 +3332,9 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
         #
     #
     #
+
     def save_model(self, file_save):
-        print "saving model ... "
+        print("saving model ... ")
         model_dict = {}
         for param in self.params:
             model_dict[param.name] = numpy.copy(
@@ -3302,8 +3348,10 @@ class NeuralHawkesAdaptiveBaseCTSM(object):
         #
 #
 #
+
+
 class NeuralHawkesSimpleCTSM(object):
-    #TODO: all parameters controlled by one LSTM state
+    # TODO: all parameters controlled by one LSTM state
     #
     #
     def __init__(self, settings):
@@ -3311,18 +3359,18 @@ class NeuralHawkesSimpleCTSM(object):
         self.coef_l2 = settings['coef_l2']
         #
         #
-        print "initializing Generalized Neural Hawkes with Adaptive Base Rate CTSM ... "
+        print("initializing Generalized Neural Hawkes with Adaptive Base Rate CTSM ... ")
         if settings['path_pre_train'] == None:
             self.dim_process = settings['dim_process']
             self.dim_time = settings['dim_time']
             # the dimension of time representations
             self.dim_model = settings['dim_model']
             # initialize variables
-            #self.mu = theano.shared(
+            # self.mu = theano.shared(
             #    numpy.ones(
             #        (self.dim_process,), dtype=dtype
             #    ), name='mu'
-            #)
+            # )
             '''
             we need to notice that: in these matrices of D * K
             the (i, j) entry is the effect of i-th dimension
@@ -3330,23 +3378,23 @@ class NeuralHawkesSimpleCTSM(object):
             this order may be different from that of Hawkes
             so we need to be careful when interpreting
             '''
-            #self.delta = theano.shared(
+            # self.delta = theano.shared(
             #    numpy.ones(
             #        (self.dim_model, self.dim_process),
             #        dtype=dtype
             #    ), name='delta'
-            #)
+            # )
             #
             self.W_hawkes = theano.shared(
                 numpy.float32(
                     numpy.random.normal(
-                        loc = 0.0, scale = 0.1,
-                        size = (
+                        loc=0.0, scale=0.1,
+                        size=(
                             self.dim_model,
                             3 * self.dim_process
                         )
                     )
-                ), name = 'W_hawkes'
+                ), name='W_hawkes'
             )
             self.b_hawkes = theano.shared(
                 numpy.zeros(
@@ -3382,14 +3430,14 @@ class NeuralHawkesSimpleCTSM(object):
             )
             with open(path_pre_train, 'rb') as f:
                 model_pre_train = pickle.load(f)
-            #with open(settings['path_pre_train'], 'rb') as f:
+            # with open(settings['path_pre_train'], 'rb') as f:
             #    model_pre_train = pickle.load(f)
             self.dim_process = model_pre_train['dim_process']
             self.dim_model = model_pre_train['dim_model']
             self.dim_time = model_pre_train['dim_time']
             #
             self.W_hawkes = theano.shared(
-                model_pre_train['W_hawkes'], name = 'W_hawkes'
+                model_pre_train['W_hawkes'], name='W_hawkes'
             )
             self.b_hawkes = theano.shared(
                 model_pre_train['b_hawkes'], name='b_hawkes'
@@ -3426,7 +3474,7 @@ class NeuralHawkesSimpleCTSM(object):
         # alpha & delta, i-row j-col is the effect of j to i
         #
         self.params = [
-            #self.mu, #self.delta,
+            # self.mu, #self.delta,
             self.W_hawkes, self.b_hawkes,
             self.Emb_event, self.Emb_time,
             self.W_recur, self.b_recur
@@ -3442,7 +3490,7 @@ class NeuralHawkesSimpleCTSM(object):
         #
         self.norm_l2 = numpy.float32(0.0)
         for param in self.params:
-            self.norm_l2 += tensor.sum( param ** 2 )
+            self.norm_l2 += tensor.sum(param ** 2)
         self.term_reg = self.coef_l2 * self.norm_l2
         #
         #
@@ -3453,13 +3501,14 @@ class NeuralHawkesSimpleCTSM(object):
         return tensor.log(numpy.float32(1.0)+tensor.exp(x))
     #
     #
+
     def rnn_unit(
         self, emb_event_t, emb_time_t,
         hidden_tm1, cell_tm1
     ):
         pre_transform = tensor.concatenate(
             [emb_event_t, emb_time_t, hidden_tm1],
-            axis = 1
+            axis=1
         )
         post_transform = tensor.dot(
             pre_transform, self.W_recur
@@ -3485,6 +3534,7 @@ class NeuralHawkesSimpleCTSM(object):
         return hidden_t, cell_t
     #
     #
+
     def compute_loss(
         self,
         seq_time_to_current,
@@ -3509,7 +3559,7 @@ class NeuralHawkesSimpleCTSM(object):
         seq_sims_index_in_hidden : N * size_batch -- int32
         seq_sims_mask : N * size_batch -- 1/0
         '''
-        print "computing loss function of Neural Hawkes model ... "
+        print("computing loss function of Neural Hawkes model ... ")
         #
         # we first process the past history of events with LSTM
         seq_emb_event = self.Emb_event[seq_type_event, :]
@@ -3523,7 +3573,7 @@ class NeuralHawkesSimpleCTSM(object):
         '''
         # T * size_batch * dim_model
         seq_emb_time = tensor.tensordot(
-            seq_time_rep, self.Emb_time, (2,0)
+            seq_time_rep, self.Emb_time, (2, 0)
         )
         #
         initial_hidden_mat = tensor.outer(
@@ -3537,16 +3587,16 @@ class NeuralHawkesSimpleCTSM(object):
         # a special BOS event,
         # to initialize the h and c
         [seq_hidden, seq_cell], _ = theano.scan(
-            fn = self.rnn_unit,
-            sequences = [
+            fn=self.rnn_unit,
+            sequences=[
                 dict(input=seq_emb_event, taps=[0]),
                 dict(input=seq_emb_time, taps=[0])
             ],
-            outputs_info = [
+            outputs_info=[
                 dict(initial=initial_hidden_mat, taps=[-1]),
                 dict(initial=initial_cell_mat, taps=[-1])
             ],
-            non_sequences = None
+            non_sequences=None
         )
         #
         seq_hidden_for_lambda = seq_hidden[:-1, :, :]
@@ -3594,7 +3644,7 @@ class NeuralHawkesSimpleCTSM(object):
         # self.W_delta : dim_model * dim_model * dim_process
         #
         params_hawkes_for_sims = tensor.tensordot(
-            seq_hidden_for_sims, self.W_hawkes, (2,0)
+            seq_hidden_for_sims, self.W_hawkes, (2, 0)
         ) + self.b_hawkes[None, None, :]
         #
         mu_for_sims = params_hawkes_for_sims[
@@ -3637,7 +3687,7 @@ class NeuralHawkesSimpleCTSM(object):
         # seq_hidden_for_lambda : T * size_batch * dim_model
         #
         params_hawkes_for_lambda = tensor.tensordot(
-            seq_hidden_for_lambda, self.W_hawkes, (2,0)
+            seq_hidden_for_lambda, self.W_hawkes, (2, 0)
         ) + self.b_hawkes[None, None, :]
         #
         mu_for_lambda = params_hawkes_for_lambda[
@@ -3665,7 +3715,7 @@ class NeuralHawkesSimpleCTSM(object):
         )
         # T * size_batch * dim_process
         lambda_sum_over_seq = tensor.sum(
-            lambda_over_seq, axis = 2
+            lambda_over_seq, axis=2
         )
         # T * size_batch
         #
@@ -3679,7 +3729,7 @@ class NeuralHawkesSimpleCTSM(object):
             (new_shape_0, new_shape_1)
         )[
             tensor.arange(new_shape_0),
-            seq_type_event[1:,:].flatten()
+            seq_type_event[1:, :].flatten()
         ].reshape(
             (back_shape_0, back_shape_1)
         )
@@ -3730,8 +3780,9 @@ class NeuralHawkesSimpleCTSM(object):
         #
     #
     #
+
     def save_model(self, file_save):
-        print "saving model ... "
+        print("saving model ... ")
         model_dict = {}
         for param in self.params:
             model_dict[param.name] = numpy.copy(
@@ -3746,18 +3797,21 @@ class NeuralHawkesSimpleCTSM(object):
 #
 #
 #
+
+
 class NeuralHawkesCTSM_time(object):
     '''
     this model stems from neural hawkes
     but encode time (positive real values) with neural nodes
     '''
     #
+
     def __init__(self, settings):
         self.size_batch = settings['size_batch']
         self.coef_l2 = settings['coef_l2']
         #
         #
-        print "initializing Neural Hawkes CTSM ... "
+        print("initializing Neural Hawkes CTSM ... ")
         if settings['path_pre_train'] == None:
             self.dim_process = settings['dim_process']
             self.dim_time = settings['dim_time']
@@ -3822,7 +3876,7 @@ class NeuralHawkesCTSM_time(object):
             )
             with open(path_pre_train, 'rb') as f:
                 model_pre_train = pickle.load(f)
-            #with open(settings['path_pre_train'], 'rb') as f:
+            # with open(settings['path_pre_train'], 'rb') as f:
             #    model_pre_train = pickle.load(f)
             self.dim_process = model_pre_train['dim_process']
             self.dim_model = model_pre_train['dim_model']
@@ -3889,7 +3943,7 @@ class NeuralHawkesCTSM_time(object):
         #
         self.norm_l2 = numpy.float32(0.0)
         for param in self.params:
-            self.norm_l2 += tensor.sum( param ** 2 )
+            self.norm_l2 += tensor.sum(param ** 2)
         self.term_reg = self.coef_l2 * self.norm_l2
         #
         #
@@ -3897,21 +3951,22 @@ class NeuralHawkesCTSM_time(object):
 
     def soft_relu(self, x):
         # x is a symbolic tensor
-        y = tensor.log(numpy.float32(1.0)+tensor.exp(x) )
-        z = tensor.switch(x>=100.0, x, y)
+        y = tensor.log(numpy.float32(1.0)+tensor.exp(x))
+        z = tensor.switch(x >= 100.0, x, y)
         #a = tensor.switch(z>=v_max, v_max, z)
         #y[(x>=100.0).nonzeros()] = x[(x>=100.0).nonzeros()]
-        #np.finfo(np.float32).max
+        # np.finfo(np.float32).max
         return z
     #
     #
+
     def rnn_unit(
         self, emb_event_t, emb_time_t,
         hidden_tm1, cell_tm1
     ):
         pre_transform = tensor.concatenate(
             [emb_event_t, emb_time_t, hidden_tm1],
-            axis = 1
+            axis=1
         )
         post_transform = tensor.dot(
             pre_transform, self.W_recur
@@ -3937,11 +3992,12 @@ class NeuralHawkesCTSM_time(object):
         return hidden_t, cell_t
     #
     #
+
     def compute_loss(
         self,
         seq_time_to_current,
         seq_type_event,
-        #seq_time_rep,
+        # seq_time_rep,
         seq_time_values,
         time_since_start_to_end,
         num_sims_start_to_end,
@@ -3964,7 +4020,7 @@ class NeuralHawkesCTSM_time(object):
         seq_sims_index_in_hidden : N * size_batch -- int32
         seq_sims_mask : N * size_batch -- 1/0
         '''
-        print "computing loss function of Neural Hawkes model ... "
+        print("computing loss function of Neural Hawkes model ... ")
         #
         # we first process the past history of events with LSTM
         seq_emb_event = self.Emb_event[seq_type_event, :]
@@ -3981,16 +4037,16 @@ class NeuralHawkesCTSM_time(object):
         pass time values through thresholds
         '''
         seq_time_rep = tensor.nnet.relu(
-            seq_time_values[:,:,None] - self.Threshold_time[None,None,:]
-        ) # T/T+1 * size_batch * dim_time
+            seq_time_values[:, :, None] - self.Threshold_time[None, None, :]
+        )  # T/T+1 * size_batch * dim_time
         #
         seq_time_rep = tensor.concatenate(
-            [seq_time_rep, seq_time_values[:,:,None]],
+            [seq_time_rep, seq_time_values[:, :, None]],
             axis=2
         )
         #
         seq_emb_time = tensor.tensordot(
-            seq_time_rep, self.Emb_time, (2,0)
+            seq_time_rep, self.Emb_time, (2, 0)
         )
         #
         initial_hidden_mat = tensor.outer(
@@ -4004,16 +4060,16 @@ class NeuralHawkesCTSM_time(object):
         # a special BOS event,
         # to initialize the h and c
         [seq_hidden, seq_cell], _ = theano.scan(
-            fn = self.rnn_unit,
-            sequences = [
+            fn=self.rnn_unit,
+            sequences=[
                 dict(input=seq_emb_event, taps=[0]),
                 dict(input=seq_emb_time, taps=[0])
             ],
-            outputs_info = [
+            outputs_info=[
                 dict(initial=initial_hidden_mat, taps=[-1]),
                 dict(initial=initial_cell_mat, taps=[-1])
             ],
-            non_sequences = None
+            non_sequences=None
         )
         #
         seq_hidden_for_lambda = seq_hidden[:-1, :, :]
@@ -4074,7 +4130,7 @@ class NeuralHawkesCTSM_time(object):
             seq_sims_hidden_with_time * self.W_alpha[
                 None, None, :, :
             ],
-            axis = 2
+            axis=2
         )
         # N * size_batch * dim_process
         lambda_over_seq_sims = self.soft_relu(
@@ -4109,7 +4165,7 @@ class NeuralHawkesCTSM_time(object):
             seq_hidden_with_time * self.W_alpha[
                 None, None, :, :
             ],
-            axis = 2
+            axis=2
         )
         # T * size_batch * dim_process
         lambda_over_seq = self.soft_relu(
@@ -4117,7 +4173,7 @@ class NeuralHawkesCTSM_time(object):
         )
         # T * size_batch * dim_process
         lambda_sum_over_seq = tensor.sum(
-            lambda_over_seq, axis = 2
+            lambda_over_seq, axis=2
         )
         # T * size_batch
         #
@@ -4131,7 +4187,7 @@ class NeuralHawkesCTSM_time(object):
             (new_shape_0, new_shape_1)
         )[
             tensor.arange(new_shape_0),
-            seq_type_event[1:,:].flatten()
+            seq_type_event[1:, :].flatten()
         ].reshape(
             (back_shape_0, back_shape_1)
         )
@@ -4182,8 +4238,9 @@ class NeuralHawkesCTSM_time(object):
         #
     #
     #
+
     def save_model(self, file_save):
-        print "saving model ... "
+        print("saving model ... ")
         model_dict = {}
         for param in self.params:
             model_dict[param.name] = numpy.copy(
@@ -4197,18 +4254,21 @@ class NeuralHawkesCTSM_time(object):
         #
 #
 #
+
+
 class GeneralizedNeuralHawkesCTSM_time(object):
     #
     '''
     this model stems from generalized neural hawkes
     but encode time (positive real values) with neural nodes
     '''
+
     def __init__(self, settings):
         self.size_batch = settings['size_batch']
         self.coef_l2 = settings['coef_l2']
         #
         #
-        print "initializing Generalized Neural Hawkes CTSM ... "
+        print("initializing Generalized Neural Hawkes CTSM ... ")
         if settings['path_pre_train'] == None:
             self.dim_process = settings['dim_process']
             self.dim_time = settings['dim_time']
@@ -4227,24 +4287,24 @@ class GeneralizedNeuralHawkesCTSM_time(object):
             this order may be different from that of Hawkes
             so we need to be careful when interpreting
             '''
-            #self.delta = theano.shared(
+            # self.delta = theano.shared(
             #    numpy.ones(
             #        (self.dim_model, self.dim_process),
             #        dtype=dtype
             #    ), name='delta'
-            #)
+            # )
             #
             self.W_delta = theano.shared(
                 numpy.float32(
                     numpy.random.normal(
-                        loc = 0.0, scale = 0.1,
-                        size = (
+                        loc=0.0, scale=0.1,
+                        size=(
                             self.dim_model,
                             self.dim_model,
                             self.dim_process
                         )
                     )
-                ), name = 'W_delta'
+                ), name='W_delta'
             )
             # the 0-th axis -- self.dim_model
             # is for dot product with hidden units
@@ -4290,7 +4350,7 @@ class GeneralizedNeuralHawkesCTSM_time(object):
             )
             with open(path_pre_train, 'rb') as f:
                 model_pre_train = pickle.load(f)
-            #with open(settings['path_pre_train'], 'rb') as f:
+            # with open(settings['path_pre_train'], 'rb') as f:
             #    model_pre_train = pickle.load(f)
             self.dim_process = model_pre_train['dim_process']
             self.dim_model = model_pre_train['dim_model']
@@ -4299,9 +4359,9 @@ class GeneralizedNeuralHawkesCTSM_time(object):
             self.mu = theano.shared(
                 model_pre_train['mu'], name='mu'
             )
-            #self.delta = theano.shared(
+            # self.delta = theano.shared(
             #    model_pre_train['delta'], name='delta'
-            #)
+            # )
             self.W_delta = theano.shared(
                 model_pre_train['W_delta'], name='W_delta'
             )
@@ -4344,7 +4404,7 @@ class GeneralizedNeuralHawkesCTSM_time(object):
         # alpha & delta, i-row j-col is the effect of j to i
         #
         self.params = [
-            self.mu, #self.delta,
+            self.mu,  # self.delta,
             self.W_delta, self.W_alpha,
             self.Emb_event, self.Emb_time,
             self.Threshold_time,
@@ -4361,7 +4421,7 @@ class GeneralizedNeuralHawkesCTSM_time(object):
         #
         self.norm_l2 = numpy.float32(0.0)
         for param in self.params:
-            self.norm_l2 += tensor.sum( param ** 2 )
+            self.norm_l2 += tensor.sum(param ** 2)
         self.term_reg = self.coef_l2 * self.norm_l2
         #
         #
@@ -4371,21 +4431,22 @@ class GeneralizedNeuralHawkesCTSM_time(object):
         # x is a symbolic tensor
         # tensor[(x == 0).nonzeros()]
         #v_max = numpy.float32(1e9)
-        y = tensor.log(numpy.float32(1.0)+tensor.exp(x) )
-        z = tensor.switch(x>=100.0, x, y)
+        y = tensor.log(numpy.float32(1.0)+tensor.exp(x))
+        z = tensor.switch(x >= 100.0, x, y)
         #a = tensor.switch(z>=v_max, v_max, z)
         #y[(x>=100.0).nonzeros()] = x[(x>=100.0).nonzeros()]
-        #np.finfo(np.float32).max
+        # np.finfo(np.float32).max
         return z
     #
     #
+
     def rnn_unit(
         self, emb_event_t, emb_time_t,
         hidden_tm1, cell_tm1
     ):
         pre_transform = tensor.concatenate(
             [emb_event_t, emb_time_t, hidden_tm1],
-            axis = 1
+            axis=1
         )
         post_transform = tensor.dot(
             pre_transform, self.W_recur
@@ -4411,10 +4472,11 @@ class GeneralizedNeuralHawkesCTSM_time(object):
         return hidden_t, cell_t
     #
     #
+
     def compute_loss(
         self,
         seq_time_to_current,
-        seq_type_event, #seq_time_rep,
+        seq_type_event,  # seq_time_rep,
         seq_time_values,
         time_since_start_to_end,
         num_sims_start_to_end,
@@ -4436,7 +4498,7 @@ class GeneralizedNeuralHawkesCTSM_time(object):
         seq_sims_index_in_hidden : N * size_batch -- int32
         seq_sims_mask : N * size_batch -- 1/0
         '''
-        print "computing loss function of Neural Hawkes model ... "
+        print("computing loss function of Neural Hawkes model ... ")
         #
         # we first process the past history of events with LSTM
         seq_emb_event = self.Emb_event[seq_type_event, :]
@@ -4453,17 +4515,17 @@ class GeneralizedNeuralHawkesCTSM_time(object):
         pass time values through thresholds
         '''
         seq_time_rep = tensor.nnet.relu(
-            seq_time_values[:,:,None] - self.Threshold_time[None,None,:]
-        ) # T/T+1 * size_batch * dim_time
+            seq_time_values[:, :, None] - self.Threshold_time[None, None, :]
+        )  # T/T+1 * size_batch * dim_time
         #
         seq_time_rep = tensor.concatenate(
-            [seq_time_rep, seq_time_values[:,:,None]],
+            [seq_time_rep, seq_time_values[:, :, None]],
             axis=2
         )
         #
         #
         seq_emb_time = tensor.tensordot(
-            seq_time_rep, self.Emb_time, (2,0)
+            seq_time_rep, self.Emb_time, (2, 0)
         )
         #
         initial_hidden_mat = tensor.outer(
@@ -4477,16 +4539,16 @@ class GeneralizedNeuralHawkesCTSM_time(object):
         # a special BOS event,
         # to initialize the h and c
         [seq_hidden, seq_cell], _ = theano.scan(
-            fn = self.rnn_unit,
-            sequences = [
+            fn=self.rnn_unit,
+            sequences=[
                 dict(input=seq_emb_event, taps=[0]),
                 dict(input=seq_emb_time, taps=[0])
             ],
-            outputs_info = [
+            outputs_info=[
                 dict(initial=initial_hidden_mat, taps=[-1]),
                 dict(initial=initial_cell_mat, taps=[-1])
             ],
-            non_sequences = None
+            non_sequences=None
         )
         #
         seq_hidden_for_lambda = seq_hidden[:-1, :, :]
@@ -4535,7 +4597,7 @@ class GeneralizedNeuralHawkesCTSM_time(object):
         #
         delta_for_sims = self.soft_relu(
             tensor.tensordot(
-                seq_hidden_for_sims, self.W_delta, (2,0)
+                seq_hidden_for_sims, self.W_delta, (2, 0)
             )
         )
         #
@@ -4555,7 +4617,7 @@ class GeneralizedNeuralHawkesCTSM_time(object):
             seq_sims_hidden_with_time * self.W_alpha[
                 None, None, :, :
             ],
-            axis = 2
+            axis=2
         )
         # N * size_batch * dim_process
         lambda_over_seq_sims = self.soft_relu(
@@ -4580,7 +4642,7 @@ class GeneralizedNeuralHawkesCTSM_time(object):
         #
         delta_for_lambda = self.soft_relu(
             tensor.tensordot(
-                seq_hidden_for_lambda, self.W_delta, (2,0)
+                seq_hidden_for_lambda, self.W_delta, (2, 0)
             )
         )
         # T * size_batch * dim_model * dim_process
@@ -4597,7 +4659,7 @@ class GeneralizedNeuralHawkesCTSM_time(object):
             seq_hidden_with_time * self.W_alpha[
                 None, None, :, :
             ],
-            axis = 2
+            axis=2
         )
         # T * size_batch * dim_process
         lambda_over_seq = self.soft_relu(
@@ -4605,7 +4667,7 @@ class GeneralizedNeuralHawkesCTSM_time(object):
         )
         # T * size_batch * dim_process
         lambda_sum_over_seq = tensor.sum(
-            lambda_over_seq, axis = 2
+            lambda_over_seq, axis=2
         )
         # T * size_batch
         #
@@ -4619,7 +4681,7 @@ class GeneralizedNeuralHawkesCTSM_time(object):
             (new_shape_0, new_shape_1)
         )[
             tensor.arange(new_shape_0),
-            seq_type_event[1:,:].flatten()
+            seq_type_event[1:, :].flatten()
         ].reshape(
             (back_shape_0, back_shape_1)
         )
@@ -4670,8 +4732,9 @@ class GeneralizedNeuralHawkesCTSM_time(object):
         #
     #
     #
+
     def save_model(self, file_save):
-        print "saving model ... "
+        print("saving model ... ")
         model_dict = {}
         for param in self.params:
             model_dict[param.name] = numpy.copy(
@@ -4685,26 +4748,28 @@ class GeneralizedNeuralHawkesCTSM_time(object):
         #
 #
 #
+
+
 class NeuralHawkesAdaptiveBaseCTSM_time(object):
-    #TODO: the base rate is adaptive
+    # TODO: the base rate is adaptive
     #
     def __init__(self, settings):
         self.size_batch = settings['size_batch']
         self.coef_l2 = settings['coef_l2']
         #
         #
-        print "initializing Generalized Neural Hawkes with Adaptive Base Rate CTSM ... "
+        print("initializing Generalized Neural Hawkes with Adaptive Base Rate CTSM ... ")
         if settings['path_pre_train'] == None:
             self.dim_process = settings['dim_process']
             self.dim_time = settings['dim_time']
             # the dimension of time representations
             self.dim_model = settings['dim_model']
             # initialize variables
-            #self.mu = theano.shared(
+            # self.mu = theano.shared(
             #    numpy.ones(
             #        (self.dim_process,), dtype=dtype
             #    ), name='mu'
-            #)
+            # )
             '''
             we need to notice that: in these matrices of D * K
             the (i, j) entry is the effect of i-th dimension
@@ -4712,36 +4777,36 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
             this order may be different from that of Hawkes
             so we need to be careful when interpreting
             '''
-            #self.delta = theano.shared(
+            # self.delta = theano.shared(
             #    numpy.ones(
             #        (self.dim_model, self.dim_process),
             #        dtype=dtype
             #    ), name='delta'
-            #)
+            # )
             #
             self.W_mu = theano.shared(
                 numpy.float32(
                     numpy.random.normal(
-                        loc = 0.0, scale = 0.1,
-                        size = (
+                        loc=0.0, scale=0.1,
+                        size=(
                             self.dim_model, self.dim_process
                         )
                     )
-                ), name = 'W_mu'
+                ), name='W_mu'
             )
             #
             #
             self.W_delta = theano.shared(
                 numpy.float32(
                     numpy.random.normal(
-                        loc = 0.0, scale = 0.1,
-                        size = (
+                        loc=0.0, scale=0.1,
+                        size=(
                             self.dim_model,
                             self.dim_model,
                             self.dim_process
                         )
                     )
-                ), name = 'W_delta'
+                ), name='W_delta'
             )
             # the 0-th axis -- self.dim_model
             # is for dot product with hidden units
@@ -4787,7 +4852,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
             )
             with open(path_pre_train, 'rb') as f:
                 model_pre_train = pickle.load(f)
-            #with open(settings['path_pre_train'], 'rb') as f:
+            # with open(settings['path_pre_train'], 'rb') as f:
             #    model_pre_train = pickle.load(f)
             self.dim_process = model_pre_train['dim_process']
             self.dim_model = model_pre_train['dim_model']
@@ -4796,14 +4861,14 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
             self.W_mu = theano.shared(
                 model_pre_train['W_mu'], name='W_mu'
             )
-            #self.delta = theano.shared(
+            # self.delta = theano.shared(
             #    model_pre_train['delta'], name='delta'
-            #)
+            # )
             self.W_delta = theano.shared(
                 model_pre_train['W_delta'], name='W_delta'
             )
-            #print "W_delta is : "
-            #print model_pre_train['W_delta']
+            # print"W_delta is : "
+            # printmodel_pre_train['W_delta']
             self.W_alpha = theano.shared(
                 model_pre_train['W_alpha'], name='W_alpha'
             )
@@ -4843,7 +4908,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         # alpha & delta, i-row j-col is the effect of j to i
         #
         self.params = [
-            #self.mu, #self.delta,
+            # self.mu, #self.delta,
             self.W_mu, self.W_delta, self.W_alpha,
             self.Emb_event, self.Emb_time,
             self.Threshold_time,
@@ -4860,7 +4925,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         #
         self.norm_l2 = numpy.float32(0.0)
         for param in self.params:
-            self.norm_l2 += tensor.sum( param ** 2 )
+            self.norm_l2 += tensor.sum(param ** 2)
         self.term_reg = self.coef_l2 * self.norm_l2
         #
         #
@@ -4870,21 +4935,22 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         # x is a symbolic tensor
         # tensor[(x == 0).nonzeros()]
         #v_max = numpy.float32(1e9)
-        y = tensor.log(numpy.float32(1.0)+tensor.exp(x) )
-        z = tensor.switch(x>=100.0, x, y)
+        y = tensor.log(numpy.float32(1.0)+tensor.exp(x))
+        z = tensor.switch(x >= 100.0, x, y)
         #a = tensor.switch(z>=v_max, v_max, z)
         #y[(x>=100.0).nonzeros()] = x[(x>=100.0).nonzeros()]
-        #np.finfo(np.float32).max
+        # np.finfo(np.float32).max
         return z
     #
     #
+
     def rnn_unit(
         self, emb_event_t, emb_time_t,
         hidden_tm1, cell_tm1
     ):
         pre_transform = tensor.concatenate(
             [emb_event_t, emb_time_t, hidden_tm1],
-            axis = 1
+            axis=1
         )
         post_transform = tensor.dot(
             pre_transform, self.W_recur
@@ -4910,10 +4976,11 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         return hidden_t, cell_t
     #
     #
+
     def compute_loss(
         self,
         seq_time_to_current,
-        seq_type_event, #seq_time_rep,
+        seq_type_event,  # seq_time_rep,
         seq_time_values,
         time_since_start_to_end,
         num_sims_start_to_end,
@@ -4935,7 +5002,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         seq_sims_index_in_hidden : N * size_batch -- int32
         seq_sims_mask : N * size_batch -- 1/0
         '''
-        print "computing loss function of Neural Hawkes model ... "
+        print( "computing loss function of Neural Hawkes model ... ")
         #
         # we first process the past history of events with LSTM
         seq_emb_event = self.Emb_event[seq_type_event, :]
@@ -4952,17 +5019,17 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         pass time values through thresholds
         '''
         seq_time_rep = tensor.nnet.relu(
-            seq_time_values[:,:,None] - self.Threshold_time[None,None,:]
-        ) # T/T+1 * size_batch * dim_time
+            seq_time_values[:, :, None] - self.Threshold_time[None, None, :]
+        )  # T/T+1 * size_batch * dim_time
         #
         seq_time_rep = tensor.concatenate(
-            [seq_time_rep, seq_time_values[:,:,None]],
+            [seq_time_rep, seq_time_values[:, :, None]],
             axis=2
         )
         #
         #
         seq_emb_time = tensor.tensordot(
-            seq_time_rep, self.Emb_time, (2,0)
+            seq_time_rep, self.Emb_time, (2, 0)
         )
         #
         initial_hidden_mat = tensor.outer(
@@ -4976,16 +5043,16 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         # a special BOS event,
         # to initialize the h and c
         [seq_hidden, seq_cell], _ = theano.scan(
-            fn = self.rnn_unit,
-            sequences = [
+            fn=self.rnn_unit,
+            sequences=[
                 dict(input=seq_emb_event, taps=[0]),
                 dict(input=seq_emb_time, taps=[0])
             ],
-            outputs_info = [
+            outputs_info=[
                 dict(initial=initial_hidden_mat, taps=[-1]),
                 dict(initial=initial_cell_mat, taps=[-1])
             ],
-            non_sequences = None
+            non_sequences=None
         )
         #
         seq_hidden_for_lambda = seq_hidden[:-1, :, :]
@@ -5034,7 +5101,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         #
         delta_for_sims = self.soft_relu(
             tensor.tensordot(
-                seq_hidden_for_sims, self.W_delta, (2,0)
+                seq_hidden_for_sims, self.W_delta, (2, 0)
             )
         )
         #
@@ -5051,7 +5118,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         # N * size_batch * dim_model * dim_process
         # self.W_alpha : dim_model * dim_process
         mu_for_sims = tensor.tensordot(
-            seq_hidden_for_sims, self.W_mu, (2,0)
+            seq_hidden_for_sims, self.W_mu, (2, 0)
         )
         # N * size_batch * dim_process
         #
@@ -5059,7 +5126,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
             seq_sims_hidden_with_time * self.W_alpha[
                 None, None, :, :
             ],
-            axis = 2
+            axis=2
         )
         # N * size_batch * dim_process
         lambda_over_seq_sims = self.soft_relu(
@@ -5084,7 +5151,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         #
         delta_for_lambda = self.soft_relu(
             tensor.tensordot(
-                seq_hidden_for_lambda, self.W_delta, (2,0)
+                seq_hidden_for_lambda, self.W_delta, (2, 0)
             )
         )
         # T * size_batch * dim_model * dim_process
@@ -5099,7 +5166,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         # T * size_batch * dim_model * dim_process
         #
         mu_for_lambda = tensor.tensordot(
-            seq_hidden_for_lambda, self.W_mu, (2,0)
+            seq_hidden_for_lambda, self.W_mu, (2, 0)
         )
         # T * size_batch * dim_process
         #
@@ -5107,7 +5174,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
             seq_hidden_with_time * self.W_alpha[
                 None, None, :, :
             ],
-            axis = 2
+            axis=2
         )
         # T * size_batch * dim_process
         lambda_over_seq = self.soft_relu(
@@ -5115,7 +5182,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         )
         # T * size_batch * dim_process
         lambda_sum_over_seq = tensor.sum(
-            lambda_over_seq, axis = 2
+            lambda_over_seq, axis=2
         )
         # T * size_batch
         #
@@ -5129,7 +5196,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
             (new_shape_0, new_shape_1)
         )[
             tensor.arange(new_shape_0),
-            seq_type_event[1:,:].flatten()
+            seq_type_event[1:, :].flatten()
         ].reshape(
             (back_shape_0, back_shape_1)
         )
@@ -5180,9 +5247,10 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         #
     #
     #
+
     def compute_prediction(
         self,
-        seq_type_event, #seq_time_rep,
+        seq_type_event,  # seq_time_rep,
         seq_time_values,
         seq_mask,
         time_diffs
@@ -5196,19 +5264,19 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         sample diff time for each item in each batch
         same within one batch
         '''
-        print "computing predictions ... "
+        print("computing predictions ... ")
         seq_emb_event = self.Emb_event[seq_type_event, :]
         seq_time_rep = tensor.nnet.relu(
-            seq_time_values[:,:,None] - self.Threshold_time[None,None,:]
-        ) # T/T+1 * size_batch * dim_time
+            seq_time_values[:, :, None] - self.Threshold_time[None, None, :]
+        )  # T/T+1 * size_batch * dim_time
         #
         seq_time_rep = tensor.concatenate(
-            [seq_time_rep, seq_time_values[:,:,None]],
+            [seq_time_rep, seq_time_values[:, :, None]],
             axis=2
         )
         #
         seq_emb_time = tensor.tensordot(
-            seq_time_rep, self.Emb_time, (2,0)
+            seq_time_rep, self.Emb_time, (2, 0)
         )
         #
         initial_hidden_mat = tensor.outer(
@@ -5222,23 +5290,23 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         # a special BOS event,
         # to initialize the h and c
         [seq_hidden, seq_cell], _ = theano.scan(
-            fn = self.rnn_unit,
-            sequences = [
+            fn=self.rnn_unit,
+            sequences=[
                 dict(input=seq_emb_event, taps=[0]),
                 dict(input=seq_emb_time, taps=[0])
             ],
-            outputs_info = [
+            outputs_info=[
                 dict(initial=initial_hidden_mat, taps=[-1]),
                 dict(initial=initial_cell_mat, taps=[-1])
             ],
-            non_sequences = None
+            non_sequences=None
         )
         # seq_hidden : (T+1) * size_batch * dim_model
         seq_hidden_for_lambda = seq_hidden[:-1, :, :]
         # seq_hidden_for_lambda :
         # T * size_batch * dim_model
         delta_for_lambda_pre = tensor.tensordot(
-            seq_hidden_for_lambda, self.W_delta, (2,0)
+            seq_hidden_for_lambda, self.W_delta, (2, 0)
         )
         #
         delta_for_lambda = self.soft_relu(
@@ -5257,13 +5325,13 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         )
         # T * size_batch * dim_model * dim_process * M
         mu_for_lambda = tensor.tensordot(
-            seq_hidden_for_lambda, self.W_mu, (2,0)
+            seq_hidden_for_lambda, self.W_mu, (2, 0)
         )
         # T * size_batch * dim_process
         lambda_over_seq_tilde = tensor.sum(
             seq_hidden_with_time * self.W_alpha[
                 None, None, :, :, None
-            ], axis = 2
+            ], axis=2
         ) + mu_for_lambda[:, :, :, None]
         # T * size_batch * dim_process * M
         # each time stamp, each seq in batch
@@ -5285,7 +5353,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         # M *
         term_2 = tensor.exp(
             -1.0 * tensor.extra_ops.cumsum(
-                lambda_sum_over_seq, axis = 2
+                lambda_sum_over_seq, axis=2
             ) / cum_num[None, None, :]
         )
         # T * size_batch * M
@@ -5294,7 +5362,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         density = term_2 * term_3
         time_prediction = tensor.mean(
             term_1[None, None, :] * density,
-            axis = 2
+            axis=2
         )
         # T * size_batch
         lambda_over_seq_over_sims = lambda_over_seq[
@@ -5306,11 +5374,11 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         ]
         # T * size_batch * dim_process * M
         prob_over_seq_over_type = tensor.mean(
-            lambda_over_seq_over_sims, axis = 3
+            lambda_over_seq_over_sims, axis=3
         )
         # T * size_batch * dim_process
         type_prediction = tensor.argmax(
-            prob_over_seq_over_type, axis = 2
+            prob_over_seq_over_type, axis=2
         )
         # T * size_batch
         # Now we have :
@@ -5337,7 +5405,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         self.num_of_events = tensor.sum(seq_mask)
         #
         #
-        #TODO: for debug
+        # TODO: for debug
         #self.time_prediction = time_prediction
         #self.target_time = target_time
         #self.type_prediction = type_prediction
@@ -5348,16 +5416,17 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         #self.cum_num = cum_num
         #self.density = density
         #self.seq_delta_pre = delta_for_lambda_pre[-1,0,:]
-        #self.seq_delta_pre_check = tensor.dot(
+        # self.seq_delta_pre_check = tensor.dot(
         #    self.seq_hidden, self.W_delta
-        #)
+        # )
         #self.seq_delta = delta_for_lambda
         #self.lambda_tilde = lambda_over_seq_tilde
         #
     #
     #
+
     def get_model(self):
-        print "getting model ... "
+        print("getting model ... ")
         model_dict = {}
         for param in self.params:
             model_dict[param.name] = numpy.copy(
@@ -5369,8 +5438,9 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
         return model_dict
     #
     #
+
     def save_model(self, file_save):
-        print "saving model ... "
+        print("saving model ... ")
         model_dict = {}
         for param in self.params:
             model_dict[param.name] = numpy.copy(
@@ -5385,8 +5455,10 @@ class NeuralHawkesAdaptiveBaseCTSM_time(object):
 #
 #
 #
+
+
 class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
-    #TODO: the base rate is adaptive
+    # TODO: the base rate is adaptive
     # and it uses neural time encoder
     # and it uses scale parameter  s_k
     # to addjust the soft_relu 's curvature
@@ -5396,18 +5468,18 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         self.coef_l2 = settings['coef_l2']
         #
         #
-        print "initializing Generalized Neural Hawkes with Adaptive Base Rate CTSM with neural time encoder and scale s_k ... "
+        print("initializing Generalized Neural Hawkes with Adaptive Base Rate CTSM with neural time encoder and scale s_k ... ")
         if settings['path_pre_train'] == None:
             self.dim_process = settings['dim_process']
             self.dim_time = settings['dim_time']
             # the dimension of time representations
             self.dim_model = settings['dim_model']
             # initialize variables
-            #self.mu = theano.shared(
+            # self.mu = theano.shared(
             #    numpy.ones(
             #        (self.dim_process,), dtype=dtype
             #    ), name='mu'
-            #)
+            # )
             '''
             we need to notice that: in these matrices of D * K
             the (i, j) entry is the effect of i-th dimension
@@ -5415,12 +5487,12 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
             this order may be different from that of Hawkes
             so we need to be careful when interpreting
             '''
-            #self.delta = theano.shared(
+            # self.delta = theano.shared(
             #    numpy.ones(
             #        (self.dim_model, self.dim_process),
             #        dtype=dtype
             #    ), name='delta'
-            #)
+            # )
             self.scale = theano.shared(
                 numpy.ones(
                     (self.dim_process,), dtype=dtype
@@ -5430,26 +5502,26 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
             self.W_mu = theano.shared(
                 numpy.float32(
                     numpy.random.normal(
-                        loc = 0.0, scale = 0.1,
-                        size = (
+                        loc=0.0, scale=0.1,
+                        size=(
                             self.dim_model, self.dim_process
                         )
                     )
-                ), name = 'W_mu'
+                ), name='W_mu'
             )
             #
             #
             self.W_delta = theano.shared(
                 numpy.float32(
                     numpy.random.normal(
-                        loc = 0.0, scale = 0.1,
-                        size = (
+                        loc=0.0, scale=0.1,
+                        size=(
                             self.dim_model,
                             self.dim_model,
                             self.dim_process
                         )
                     )
-                ), name = 'W_delta'
+                ), name='W_delta'
             )
             # the 0-th axis -- self.dim_model
             # is for dot product with hidden units
@@ -5495,7 +5567,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
             )
             with open(path_pre_train, 'rb') as f:
                 model_pre_train = pickle.load(f)
-            #with open(settings['path_pre_train'], 'rb') as f:
+            # with open(settings['path_pre_train'], 'rb') as f:
             #    model_pre_train = pickle.load(f)
             self.dim_process = model_pre_train['dim_process']
             self.dim_model = model_pre_train['dim_model']
@@ -5508,15 +5580,15 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
             self.W_mu = theano.shared(
                 model_pre_train['W_mu'], name='W_mu'
             )
-            #self.delta = theano.shared(
+            # self.delta = theano.shared(
             #    model_pre_train['delta'], name='delta'
-            #)
+            # )
             #
             self.W_delta = theano.shared(
                 model_pre_train['W_delta'], name='W_delta'
             )
-            #print "W_delta is : "
-            #print model_pre_train['W_delta']
+            # print"W_delta is : "
+            # printmodel_pre_train['W_delta']
             self.W_alpha = theano.shared(
                 model_pre_train['W_alpha'], name='W_alpha'
             )
@@ -5556,8 +5628,8 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         # alpha & delta, i-row j-col is the effect of j to i
         #
         self.params = [
-            #self.mu, #self.delta,
-            self.scale, # scale parameter
+            # self.mu, #self.delta,
+            self.scale,  # scale parameter
             self.W_mu, self.W_delta, self.W_alpha,
             self.Emb_event, self.Emb_time,
             self.Threshold_time,
@@ -5574,7 +5646,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         #
         self.norm_l2 = numpy.float32(0.0)
         for param in self.params:
-            self.norm_l2 += tensor.sum( param ** 2 )
+            self.norm_l2 += tensor.sum(param ** 2)
         self.term_reg = self.coef_l2 * self.norm_l2
         #
         #
@@ -5584,32 +5656,34 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         # x is a symbolic tensor
         # tensor[(x == 0).nonzeros()]
         #v_max = numpy.float32(1e9)
-        y = tensor.log(numpy.float32(1.0)+tensor.exp(x) )
-        z = tensor.switch(x>=100.0, x, y)
+        y = tensor.log(numpy.float32(1.0)+tensor.exp(x))
+        z = tensor.switch(x >= 100.0, x, y)
         #a = tensor.switch(z>=v_max, v_max, z)
         #y[(x>=100.0).nonzeros()] = x[(x>=100.0).nonzeros()]
-        #np.finfo(np.float32).max
+        # np.finfo(np.float32).max
         return z
     #
     #
+
     def soft_relu_scale(self, x):
         # x is symbolic tensor
         # last dim is dim_process
         # this is important !
         x /= self.scale
-        y = tensor.log(numpy.float32(1.0)+tensor.exp(x) )
-        z = tensor.switch(x>=100.0, x, y)
+        y = tensor.log(numpy.float32(1.0)+tensor.exp(x))
+        z = tensor.switch(x >= 100.0, x, y)
         z *= self.scale
         return z
     #
     #
+
     def rnn_unit(
         self, emb_event_t, emb_time_t,
         hidden_tm1, cell_tm1
     ):
         pre_transform = tensor.concatenate(
             [emb_event_t, emb_time_t, hidden_tm1],
-            axis = 1
+            axis=1
         )
         post_transform = tensor.dot(
             pre_transform, self.W_recur
@@ -5635,10 +5709,11 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         return hidden_t, cell_t
     #
     #
+
     def compute_loss(
         self,
         seq_time_to_current,
-        seq_type_event, #seq_time_rep,
+        seq_type_event,  # seq_time_rep,
         seq_time_values,
         time_since_start_to_end,
         num_sims_start_to_end,
@@ -5660,7 +5735,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         seq_sims_index_in_hidden : N * size_batch -- int32
         seq_sims_mask : N * size_batch -- 1/0
         '''
-        print "computing loss function of Neural Hawkes model ... "
+        print("computing loss function of Neural Hawkes model ... ")
         #
         # we first process the past history of events with LSTM
         seq_emb_event = self.Emb_event[seq_type_event, :]
@@ -5677,17 +5752,17 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         pass time values through thresholds
         '''
         seq_time_rep = tensor.nnet.relu(
-            seq_time_values[:,:,None] - self.Threshold_time[None,None,:]
-        ) # T/T+1 * size_batch * dim_time
+            seq_time_values[:, :, None] - self.Threshold_time[None, None, :]
+        )  # T/T+1 * size_batch * dim_time
         #
         seq_time_rep = tensor.concatenate(
-            [seq_time_rep, seq_time_values[:,:,None]],
+            [seq_time_rep, seq_time_values[:, :, None]],
             axis=2
         )
         #
         #
         seq_emb_time = tensor.tensordot(
-            seq_time_rep, self.Emb_time, (2,0)
+            seq_time_rep, self.Emb_time, (2, 0)
         )
         #
         initial_hidden_mat = tensor.outer(
@@ -5701,16 +5776,16 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         # a special BOS event,
         # to initialize the h and c
         [seq_hidden, seq_cell], _ = theano.scan(
-            fn = self.rnn_unit,
-            sequences = [
+            fn=self.rnn_unit,
+            sequences=[
                 dict(input=seq_emb_event, taps=[0]),
                 dict(input=seq_emb_time, taps=[0])
             ],
-            outputs_info = [
+            outputs_info=[
                 dict(initial=initial_hidden_mat, taps=[-1]),
                 dict(initial=initial_cell_mat, taps=[-1])
             ],
-            non_sequences = None
+            non_sequences=None
         )
         #
         seq_hidden_for_lambda = seq_hidden[:-1, :, :]
@@ -5759,7 +5834,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         #
         delta_for_sims = self.soft_relu(
             tensor.tensordot(
-                seq_hidden_for_sims, self.W_delta, (2,0)
+                seq_hidden_for_sims, self.W_delta, (2, 0)
             )
         )
         #
@@ -5776,7 +5851,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         # N * size_batch * dim_model * dim_process
         # self.W_alpha : dim_model * dim_process
         mu_for_sims = tensor.tensordot(
-            seq_hidden_for_sims, self.W_mu, (2,0)
+            seq_hidden_for_sims, self.W_mu, (2, 0)
         )
         # N * size_batch * dim_process
         #
@@ -5784,7 +5859,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
             seq_sims_hidden_with_time * self.W_alpha[
                 None, None, :, :
             ],
-            axis = 2
+            axis=2
         )
         # N * size_batch * dim_process
         lambda_over_seq_sims = self.soft_relu_scale(
@@ -5809,7 +5884,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         #
         delta_for_lambda = self.soft_relu(
             tensor.tensordot(
-                seq_hidden_for_lambda, self.W_delta, (2,0)
+                seq_hidden_for_lambda, self.W_delta, (2, 0)
             )
         )
         # T * size_batch * dim_model * dim_process
@@ -5824,7 +5899,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         # T * size_batch * dim_model * dim_process
         #
         mu_for_lambda = tensor.tensordot(
-            seq_hidden_for_lambda, self.W_mu, (2,0)
+            seq_hidden_for_lambda, self.W_mu, (2, 0)
         )
         # T * size_batch * dim_process
         #
@@ -5832,7 +5907,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
             seq_hidden_with_time * self.W_alpha[
                 None, None, :, :
             ],
-            axis = 2
+            axis=2
         )
         # T * size_batch * dim_process
         lambda_over_seq = self.soft_relu_scale(
@@ -5840,7 +5915,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         )
         # T * size_batch * dim_process
         lambda_sum_over_seq = tensor.sum(
-            lambda_over_seq, axis = 2
+            lambda_over_seq, axis=2
         )
         # T * size_batch
         #
@@ -5854,7 +5929,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
             (new_shape_0, new_shape_1)
         )[
             tensor.arange(new_shape_0),
-            seq_type_event[1:,:].flatten()
+            seq_type_event[1:, :].flatten()
         ].reshape(
             (back_shape_0, back_shape_1)
         )
@@ -5906,27 +5981,28 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
     #
     #
     #
+
     def compute_prediction_loss(
         self,
-        seq_type_event, #seq_time_rep,
+        seq_type_event,  # seq_time_rep,
         seq_time_values,
         seq_mask,
         time_diffs
     ):
         #
-        print "computing predictions loss ... "
+        print("computing predictions loss ... ")
         seq_emb_event = self.Emb_event[seq_type_event, :]
         seq_time_rep = tensor.nnet.relu(
-            seq_time_values[:,:,None] - self.Threshold_time[None,None,:]
-        ) # T/T+1 * size_batch * dim_time
+            seq_time_values[:, :, None] - self.Threshold_time[None, None, :]
+        )  # T/T+1 * size_batch * dim_time
         #
         seq_time_rep = tensor.concatenate(
-            [seq_time_rep, seq_time_values[:,:,None]],
+            [seq_time_rep, seq_time_values[:, :, None]],
             axis=2
         )
         #
         seq_emb_time = tensor.tensordot(
-            seq_time_rep, self.Emb_time, (2,0)
+            seq_time_rep, self.Emb_time, (2, 0)
         )
         #
         initial_hidden_mat = tensor.outer(
@@ -5940,23 +6016,23 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         # a special BOS event,
         # to initialize the h and c
         [seq_hidden, seq_cell], _ = theano.scan(
-            fn = self.rnn_unit,
-            sequences = [
+            fn=self.rnn_unit,
+            sequences=[
                 dict(input=seq_emb_event, taps=[0]),
                 dict(input=seq_emb_time, taps=[0])
             ],
-            outputs_info = [
+            outputs_info=[
                 dict(initial=initial_hidden_mat, taps=[-1]),
                 dict(initial=initial_cell_mat, taps=[-1])
             ],
-            non_sequences = None
+            non_sequences=None
         )
         # seq_hidden : (T+1) * size_batch * dim_model
         seq_hidden_for_lambda = seq_hidden[:-1, :, :]
         # seq_hidden_for_lambda :
         # T * size_batch * dim_model
         delta_for_lambda_pre = tensor.tensordot(
-            seq_hidden_for_lambda, self.W_delta, (2,0)
+            seq_hidden_for_lambda, self.W_delta, (2, 0)
         )
         #
         delta_for_lambda = self.soft_relu(
@@ -5975,20 +6051,20 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         )
         # T * size_batch * dim_model * dim_process * M
         mu_for_lambda = tensor.tensordot(
-            seq_hidden_for_lambda, self.W_mu, (2,0)
+            seq_hidden_for_lambda, self.W_mu, (2, 0)
         )
         # T * size_batch * dim_process
         lambda_over_seq_tilde = tensor.sum(
             seq_hidden_with_time * self.W_alpha[
                 None, None, :, :, None
-            ], axis = 2
+            ], axis=2
         ) + mu_for_lambda[:, :, :, None]
         # T * size_batch * dim_process * M
         # each time stamp, each seq in batch
         # each process, each simulation for prediction
         lambda_over_seq = self.soft_relu_scale(
-            lambda_over_seq_tilde.dimshuffle(3,0,1,2)
-        ).dimshuffle(1,2,3,0)
+            lambda_over_seq_tilde.dimshuffle(3, 0, 1, 2)
+        ).dimshuffle(1, 2, 3, 0)
         #
         # T * size_batch * dim_process * M
         lambda_sum_over_seq = tensor.sum(
@@ -6006,18 +6082,18 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         term_2 = tensor.exp(
             (
                 -1.0 * tensor.extra_ops.cumsum(
-                    lambda_sum_over_seq, axis = 2
+                    lambda_sum_over_seq, axis=2
                 ) / cum_num[None, None, :]
             ) * time_diffs[
                 None, None, :
             ]
         )
         #
-        #term_2 = tensor.exp(
+        # term_2 = tensor.exp(
         #    -1.0 * lambda_sum_over_seq * time_diffs[
         #        None, None, :
         #    ]
-        #)
+        # )
         # T * size_batch * M
         term_3 = lambda_sum_over_seq
         # T * size_batch * M
@@ -6025,7 +6101,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         # T * size_batch * M
         time_prediction = tensor.mean(
             term_1[None, None, :] * density,
-            axis = 2
+            axis=2
         ) * time_diffs[-1]
         # T * size_batch
         lambda_over_seq_over_sims = lambda_over_seq[
@@ -6037,7 +6113,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         ]
         # T * size_batch * dim_process * M
         prob_over_seq_over_type = tensor.mean(
-            lambda_over_seq_over_sims, axis = 3
+            lambda_over_seq_over_sims, axis=3
         ) * time_diffs[-1]
         # T * size_batch * dim_process
         prob_over_seq_over_type /= tensor.sum(
@@ -6046,9 +6122,9 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
             keepdims=True
         )
         # T * size_batch * dim_process
-        #type_prediction = tensor.argmax(
+        # type_prediction = tensor.argmax(
         #    prob_over_seq_over_type, axis = 2
-        #)
+        # )
         # T * size_batch
         # Now we have :
         # time_prediction, type_prediction, seq_mask
@@ -6076,13 +6152,13 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         self.log_likelihood_type_predict = tensor.sum(
             log_prob_over_seq
         )
-        #diff_type = tensor.abs_(
+        # diff_type = tensor.abs_(
         #    target_type - type_prediction
-        #) * seq_mask
-        #diff_type = tensor.switch(
+        # ) * seq_mask
+        # diff_type = tensor.switch(
         #    diff_type >= numpy.float32(0.5),
         #    numpy.float32(1.0), numpy.float32(0.0)
-        #)
+        # )
         #
         #self.num_of_errors = tensor.sum(diff_type)
         # Time
@@ -6092,10 +6168,10 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         diff_time *= seq_mask
         self.square_errors = tensor.sum(diff_time)
         self.num_of_events = tensor.sum(seq_mask)
-        #TODO: Hamming loss for prediction checking
+        # TODO: Hamming loss for prediction checking
         #
         type_prediction = tensor.argmax(
-            prob_over_seq_over_type, axis = 2
+            prob_over_seq_over_type, axis=2
         )
         diff_type = tensor.abs_(
             target_type - type_prediction
@@ -6106,7 +6182,8 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         )
         self.num_of_errors = tensor.sum(diff_type)
         #
-        self.cost_to_optimize = -self.log_likelihood_type_predict / self.num_of_events + self.square_errors / self.num_of_events + self.term_reg
+        self.cost_to_optimize = -self.log_likelihood_type_predict / \
+            self.num_of_events + self.square_errors / self.num_of_events + self.term_reg
         #self.cost_to_optimize = -self.log_likelihood_type_predict + self.term_reg
         self.grad_params = tensor.grad(
             self.cost_to_optimize, self.params
@@ -6121,7 +6198,8 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         #
         #
     #
-    #TODO: memory efficient version of prediction loss
+    # TODO: memory efficient version of prediction loss
+
     def predict_each_step(
         self, hidden_for_lambda, time_diffs
     ):
@@ -6129,7 +6207,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         # time_diffs : M
         delta_for_lambda = self.soft_relu(
             tensor.tensordot(
-                hidden_for_lambda, self.W_delta, (1,0)
+                hidden_for_lambda, self.W_delta, (1, 0)
             )
         )
         # delta_for_lambda : size_batch * dim_model * dim_process
@@ -6144,24 +6222,24 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         )
         # hidden_with_time : size_batch * dim_model * dim_process * M
         mu_for_lambda = tensor.tensordot(
-            hidden_for_lambda, self.W_mu, (1,0)
+            hidden_for_lambda, self.W_mu, (1, 0)
         )
         # mu_for_lambda : size_batch * dim_process
         lambda_tilde = tensor.sum(
             hidden_with_time * self.W_alpha[
-                None, :, : , None
-            ], axis = 1
+                None, :, :, None
+            ], axis=1
         ) + mu_for_lambda[:, :, None]
         # size_batch * dim_process * M
         lambda_each_step = self.soft_relu_scale(
-            lambda_tilde.dimshuffle(2,0,1)
-        ).dimshuffle(1,2,0)
+            lambda_tilde.dimshuffle(2, 0, 1)
+        ).dimshuffle(1, 2, 0)
         # size_batch * dim_process * M
         lambda_sum_each_step = tensor.sum(
             lambda_each_step, axis=1
         )
         # size_batch * M
-        #TODO: compute integral
+        # TODO: compute integral
         term_1 = time_diffs
         cum_num = tensor.arange(
             time_diffs.shape[0]+numpy.int32(1)
@@ -6203,26 +6281,26 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
     #
     def compute_prediction_loss_lessmem(
         self,
-        seq_type_event, #seq_time_rep,
+        seq_type_event,  # seq_time_rep,
         seq_time_values,
         seq_mask,
         time_diffs
     ):
         #
-        print "computing predictions loss ... "
-        print "memory efficient version ... "
+        print("computing predictions loss ... ")
+        print("memory efficient version ... ")
         seq_emb_event = self.Emb_event[seq_type_event, :]
         seq_time_rep = tensor.nnet.relu(
-            seq_time_values[:,:,None] - self.Threshold_time[None,None,:]
-        ) # T/T+1 * size_batch * dim_time
+            seq_time_values[:, :, None] - self.Threshold_time[None, None, :]
+        )  # T/T+1 * size_batch * dim_time
         #
         seq_time_rep = tensor.concatenate(
-            [seq_time_rep, seq_time_values[:,:,None]],
+            [seq_time_rep, seq_time_values[:, :, None]],
             axis=2
         )
         #
         seq_emb_time = tensor.tensordot(
-            seq_time_rep, self.Emb_time, (2,0)
+            seq_time_rep, self.Emb_time, (2, 0)
         )
         #
         initial_hidden_mat = tensor.outer(
@@ -6236,32 +6314,32 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         # a special BOS event,
         # to initialize the h and c
         [seq_hidden, seq_cell], _ = theano.scan(
-            fn = self.rnn_unit,
-            sequences = [
+            fn=self.rnn_unit,
+            sequences=[
                 dict(input=seq_emb_event, taps=[0]),
                 dict(input=seq_emb_time, taps=[0])
             ],
-            outputs_info = [
+            outputs_info=[
                 dict(initial=initial_hidden_mat, taps=[-1]),
                 dict(initial=initial_cell_mat, taps=[-1])
             ],
-            non_sequences = None
+            non_sequences=None
         )
-        #TODO: get sequence of hidden units
+        # TODO: get sequence of hidden units
         # seq_hidden : (T+1) * size_batch * dim_model
         seq_hidden_for_lambda = seq_hidden[:-1, :, :]
         # seq_hidden_for_lambda :
         # T * size_batch * dim_model
-        #TODO: predict time and type for each step
+        # TODO: predict time and type for each step
         [prob_over_seq_over_type, time_prediction], _ = theano.scan(
-            fn = self.predict_each_step,
-            sequences = dict(
+            fn=self.predict_each_step,
+            sequences=dict(
                 input=seq_hidden_for_lambda, taps=[0]
             ),
-            outputs_info = [
+            outputs_info=[
                 None, None
             ],
-            non_sequences = time_diffs
+            non_sequences=time_diffs
         )
         #
         target_type = seq_type_event[1:, :]
@@ -6295,10 +6373,10 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         diff_time *= seq_mask
         self.square_errors = tensor.sum(diff_time)
         self.num_of_events = tensor.sum(seq_mask)
-        #TODO: Hamming loss for prediction checking
+        # TODO: Hamming loss for prediction checking
         #
         type_prediction = tensor.argmax(
-            prob_over_seq_over_type, axis = 2
+            prob_over_seq_over_type, axis=2
         )
         diff_type = tensor.abs_(
             target_type - type_prediction
@@ -6309,7 +6387,8 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         )
         self.num_of_errors = tensor.sum(diff_type)
         #
-        self.cost_to_optimize = -self.log_likelihood_type_predict / self.num_of_events + self.square_errors / self.num_of_events + self.term_reg
+        self.cost_to_optimize = -self.log_likelihood_type_predict / \
+            self.num_of_events + self.square_errors / self.num_of_events + self.term_reg
         #self.cost_to_optimize = -self.log_likelihood_type_predict + self.term_reg
         self.grad_params = tensor.grad(
             self.cost_to_optimize, self.params
@@ -6326,8 +6405,9 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
     #
     #
     #
+
     def get_model(self):
-        print "getting model ... "
+        print("getting model ... ")
         model_dict = {}
         for param in self.params:
             model_dict[param.name] = numpy.copy(
@@ -6339,8 +6419,9 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
         return model_dict
     #
     #
+
     def save_model(self, file_save):
-        print "saving model ... "
+        print("saving model ... ")
         model_dict = {}
         for param in self.params:
             model_dict[param.name] = numpy.copy(
@@ -6355,8 +6436,10 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale(object):
 #
 #
 #
+
+
 class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
-    #TODO: the base rate is adaptive
+    # TODO: the base rate is adaptive
     # and it uses neural time encoder
     # and it uses scale parameter  s_k
     # to addjust the soft_relu 's curvature
@@ -6369,7 +6452,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         self.coef_l2 = settings['coef_l2']
         #
         #
-        print "initializing Generalized Neural Hawkes with Adaptive Base Rate CTSM with neural time encoder and scale s_k ... "
+        print("initializing Generalized Neural Hawkes with Adaptive Base Rate CTSM with neural time encoder and scale s_k ... ")
         if settings['path_pre_train'] == None:
             self.dim_process = settings['dim_process']
             self.dim_time = settings['dim_time']
@@ -6385,24 +6468,24 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
             self.W_mu = theano.shared(
                 numpy.float32(
                     numpy.random.normal(
-                        loc = 0.0, scale = 0.1,
-                        size = (
+                        loc=0.0, scale=0.1,
+                        size=(
                             self.dim_model, self.dim_process
                         )
                     )
-                ), name = 'W_mu'
+                ), name='W_mu'
             )
             #
             self.W_delta = theano.shared(
                 numpy.float32(
                     numpy.random.normal(
-                        loc = 0.0, scale = 0.1,
-                        size = (
+                        loc=0.0, scale=0.1,
+                        size=(
                             self.dim_model,
                             self.dim_model
                         )
                     )
-                ), name = 'W_delta'
+                ), name='W_delta'
             )
             #
             # the 0-th axis -- self.dim_model
@@ -6449,7 +6532,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
             )
             with open(path_pre_train, 'rb') as f:
                 model_pre_train = pickle.load(f)
-            #with open(settings['path_pre_train'], 'rb') as f:
+            # with open(settings['path_pre_train'], 'rb') as f:
             #    model_pre_train = pickle.load(f)
             self.dim_process = model_pre_train['dim_process']
             self.dim_model = model_pre_train['dim_model']
@@ -6462,15 +6545,15 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
             self.W_mu = theano.shared(
                 model_pre_train['W_mu'], name='W_mu'
             )
-            #self.delta = theano.shared(
+            # self.delta = theano.shared(
             #    model_pre_train['delta'], name='delta'
-            #)
+            # )
             #
             self.W_delta = theano.shared(
                 model_pre_train['W_delta'], name='W_delta'
             )
-            #print "W_delta is : "
-            #print model_pre_train['W_delta']
+            # print"W_delta is : "
+            # printmodel_pre_train['W_delta']
             self.W_alpha = theano.shared(
                 model_pre_train['W_alpha'], name='W_alpha'
             )
@@ -6510,8 +6593,8 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         # alpha & delta, i-row j-col is the effect of j to i
         #
         self.params = [
-            #self.mu, #self.delta,
-            self.scale, # scale parameter
+            # self.mu, #self.delta,
+            self.scale,  # scale parameter
             self.W_mu, self.W_delta, self.W_alpha,
             self.Emb_event, self.Emb_time,
             self.Threshold_time,
@@ -6528,7 +6611,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         #
         self.norm_l2 = numpy.float32(0.0)
         for param in self.params:
-            self.norm_l2 += tensor.sum( param ** 2 )
+            self.norm_l2 += tensor.sum(param ** 2)
         self.term_reg = self.coef_l2 * self.norm_l2
         #
         # for intensity eval
@@ -6542,32 +6625,34 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         # x is a symbolic tensor
         # tensor[(x == 0).nonzeros()]
         #v_max = numpy.float32(1e9)
-        y = tensor.log(numpy.float32(1.0)+tensor.exp(x) )
-        z = tensor.switch(x>=100.0, x, y)
+        y = tensor.log(numpy.float32(1.0)+tensor.exp(x))
+        z = tensor.switch(x >= 100.0, x, y)
         #a = tensor.switch(z>=v_max, v_max, z)
         #y[(x>=100.0).nonzeros()] = x[(x>=100.0).nonzeros()]
-        #np.finfo(np.float32).max
+        # np.finfo(np.float32).max
         return z
     #
     #
+
     def soft_relu_scale(self, x):
         # x is symbolic tensor
         # last dim is dim_process
         # this is important !
         x /= self.scale
-        y = tensor.log(numpy.float32(1.0)+tensor.exp(x) )
-        z = tensor.switch(x>=100.0, x, y)
+        y = tensor.log(numpy.float32(1.0)+tensor.exp(x))
+        z = tensor.switch(x >= 100.0, x, y)
         z *= self.scale
         return z
     #
     #
+
     def rnn_unit(
         self, emb_event_t, emb_time_t,
         hidden_tm1, cell_tm1
     ):
         pre_transform = tensor.concatenate(
             [emb_event_t, emb_time_t, hidden_tm1],
-            axis = 1
+            axis=1
         )
         post_transform = tensor.dot(
             pre_transform, self.W_recur
@@ -6593,10 +6678,11 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         return hidden_t, cell_t
     #
     #
+
     def compute_loss(
         self,
         seq_time_to_current,
-        seq_type_event, #seq_time_rep,
+        seq_type_event,  # seq_time_rep,
         seq_time_values,
         time_since_start_to_end,
         num_sims_start_to_end,
@@ -6618,7 +6704,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         seq_sims_index_in_hidden : N * size_batch -- int32
         seq_sims_mask : N * size_batch -- 1/0
         '''
-        print "computing loss function of Neural Hawkes model ... "
+        print("computing loss function of Neural Hawkes model ... ")
         #
         # we first process the past history of events with LSTM
         seq_emb_event = self.Emb_event[seq_type_event, :]
@@ -6635,17 +6721,17 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         pass time values through thresholds
         '''
         seq_time_rep = tensor.nnet.relu(
-            seq_time_values[:,:,None] - self.Threshold_time[None,None,:]
-        ) # T/T+1 * size_batch * dim_time
+            seq_time_values[:, :, None] - self.Threshold_time[None, None, :]
+        )  # T/T+1 * size_batch * dim_time
         #
         seq_time_rep = tensor.concatenate(
-            [seq_time_rep, seq_time_values[:,:,None]],
+            [seq_time_rep, seq_time_values[:, :, None]],
             axis=2
         )
         #
         #
         seq_emb_time = tensor.tensordot(
-            seq_time_rep, self.Emb_time, (2,0)
+            seq_time_rep, self.Emb_time, (2, 0)
         )
         #
         initial_hidden_mat = tensor.outer(
@@ -6659,16 +6745,16 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         # a special BOS event,
         # to initialize the h and c
         [seq_hidden, seq_cell], _ = theano.scan(
-            fn = self.rnn_unit,
-            sequences = [
+            fn=self.rnn_unit,
+            sequences=[
                 dict(input=seq_emb_event, taps=[0]),
                 dict(input=seq_emb_time, taps=[0])
             ],
-            outputs_info = [
+            outputs_info=[
                 dict(initial=initial_hidden_mat, taps=[-1]),
                 dict(initial=initial_cell_mat, taps=[-1])
             ],
-            non_sequences = None
+            non_sequences=None
         )
         #
         seq_hidden_for_lambda = seq_hidden[:-1, :, :]
@@ -6717,7 +6803,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         #
         delta_for_sims = self.soft_relu(
             tensor.tensordot(
-                seq_hidden_for_sims, self.W_delta, (2,0)
+                seq_hidden_for_sims, self.W_delta, (2, 0)
             )
         )
         #
@@ -6734,7 +6820,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         # N * size_batch * dim_model
         # self.W_alpha : dim_model * dim_process
         mu_for_sims = tensor.tensordot(
-            seq_hidden_for_sims, self.W_mu, (2,0)
+            seq_hidden_for_sims, self.W_mu, (2, 0)
         )
         # N * size_batch * dim_process
         #
@@ -6765,7 +6851,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         #
         delta_for_lambda = self.soft_relu(
             tensor.tensordot(
-                seq_hidden_for_lambda, self.W_delta, (2,0)
+                seq_hidden_for_lambda, self.W_delta, (2, 0)
             )
         )
         # T * size_batch * dim_model
@@ -6780,7 +6866,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         # T * size_batch * dim_model
         #
         mu_for_lambda = tensor.tensordot(
-            seq_hidden_for_lambda, self.W_mu, (2,0)
+            seq_hidden_for_lambda, self.W_mu, (2, 0)
         )
         # T * size_batch * dim_process
         #
@@ -6794,7 +6880,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         )
         # T * size_batch * dim_process
         lambda_sum_over_seq = tensor.sum(
-            lambda_over_seq, axis = 2
+            lambda_over_seq, axis=2
         )
         # T * size_batch
         #
@@ -6808,7 +6894,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
             (new_shape_0, new_shape_1)
         )[
             tensor.arange(new_shape_0),
-            seq_type_event[1:,:].flatten()
+            seq_type_event[1:, :].flatten()
         ].reshape(
             (back_shape_0, back_shape_1)
         )
@@ -6859,9 +6945,10 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         #
     #
     #
+
     def compute_lambda(
         self,
-        seq_type_event, #seq_time_rep,
+        seq_type_event,  # seq_time_rep,
         seq_time_values,
         seq_sims_time_to_current,
         seq_sims_index_in_hidden,
@@ -6876,7 +6963,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         seq_sims_index_in_hidden : N * size_batch -- int32
         seq_sims_mask : N * size_batch -- 1/0
         '''
-        print "computing loss function of Neural Hawkes model ... "
+        print("computing loss function of Neural Hawkes model ... ")
         #
         # we first process the past history of events with LSTM
         seq_emb_event = self.Emb_event[seq_type_event, :]
@@ -6893,17 +6980,17 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         pass time values through thresholds
         '''
         seq_time_rep = tensor.nnet.relu(
-            seq_time_values[:,:,None] - self.Threshold_time[None,None,:]
-        ) # T/T+1 * size_batch * dim_time
+            seq_time_values[:, :, None] - self.Threshold_time[None, None, :]
+        )  # T/T+1 * size_batch * dim_time
         #
         seq_time_rep = tensor.concatenate(
-            [seq_time_rep, seq_time_values[:,:,None]],
+            [seq_time_rep, seq_time_values[:, :, None]],
             axis=2
         )
         #
         #
         seq_emb_time = tensor.tensordot(
-            seq_time_rep, self.Emb_time, (2,0)
+            seq_time_rep, self.Emb_time, (2, 0)
         )
         #
         initial_hidden_mat = tensor.outer(
@@ -6917,16 +7004,16 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         # a special BOS event,
         # to initialize the h and c
         [seq_hidden, seq_cell], _ = theano.scan(
-            fn = self.rnn_unit,
-            sequences = [
+            fn=self.rnn_unit,
+            sequences=[
                 dict(input=seq_emb_event, taps=[0]),
                 dict(input=seq_emb_time, taps=[0])
             ],
-            outputs_info = [
+            outputs_info=[
                 dict(initial=initial_hidden_mat, taps=[-1]),
                 dict(initial=initial_cell_mat, taps=[-1])
             ],
-            non_sequences = None
+            non_sequences=None
         )
         #
         seq_hidden_for_lambda = seq_hidden[:-1, :, :]
@@ -6975,7 +7062,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         #
         delta_for_sims = self.soft_relu(
             tensor.tensordot(
-                seq_hidden_for_sims, self.W_delta, (2,0)
+                seq_hidden_for_sims, self.W_delta, (2, 0)
             )
         )
         #
@@ -6992,7 +7079,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         # N * size_batch * dim_model
         # self.W_alpha : dim_model * dim_process
         mu_for_sims = tensor.tensordot(
-            seq_hidden_for_sims, self.W_mu, (2,0)
+            seq_hidden_for_sims, self.W_mu, (2, 0)
         )
         # N * size_batch * dim_process
         #
@@ -7008,33 +7095,35 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         '''
         this block is to compute intensity
         '''
-        self.lambda_samples = lambda_over_seq_sims.transpose((2,0,1)) * seq_sims_mask[None,:,:]
+        self.lambda_samples = lambda_over_seq_sims.transpose(
+            (2, 0, 1)) * seq_sims_mask[None, :, :]
         self.num_of_samples = tensor.sum(seq_sims_mask)
         #
         #
     #
     #
+
     def compute_prediction_loss(
         self,
-        seq_type_event, #seq_time_rep,
+        seq_type_event,  # seq_time_rep,
         seq_time_values,
         seq_mask,
         time_diffs
     ):
         #
-        print "computing predictions loss ... "
+        print("computing predictions loss ... ")
         seq_emb_event = self.Emb_event[seq_type_event, :]
         seq_time_rep = tensor.nnet.relu(
-            seq_time_values[:,:,None] - self.Threshold_time[None,None,:]
-        ) # T/T+1 * size_batch * dim_time
+            seq_time_values[:, :, None] - self.Threshold_time[None, None, :]
+        )  # T/T+1 * size_batch * dim_time
         #
         seq_time_rep = tensor.concatenate(
-            [seq_time_rep, seq_time_values[:,:,None]],
+            [seq_time_rep, seq_time_values[:, :, None]],
             axis=2
         )
         #
         seq_emb_time = tensor.tensordot(
-            seq_time_rep, self.Emb_time, (2,0)
+            seq_time_rep, self.Emb_time, (2, 0)
         )
         #
         initial_hidden_mat = tensor.outer(
@@ -7048,23 +7137,23 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         # a special BOS event,
         # to initialize the h and c
         [seq_hidden, seq_cell], _ = theano.scan(
-            fn = self.rnn_unit,
-            sequences = [
+            fn=self.rnn_unit,
+            sequences=[
                 dict(input=seq_emb_event, taps=[0]),
                 dict(input=seq_emb_time, taps=[0])
             ],
-            outputs_info = [
+            outputs_info=[
                 dict(initial=initial_hidden_mat, taps=[-1]),
                 dict(initial=initial_cell_mat, taps=[-1])
             ],
-            non_sequences = None
+            non_sequences=None
         )
         # seq_hidden : (T+1) * size_batch * dim_model
         seq_hidden_for_lambda = seq_hidden[:-1, :, :]
         # seq_hidden_for_lambda :
         # T * size_batch * dim_model
         delta_for_lambda_pre = tensor.tensordot(
-            seq_hidden_for_lambda, self.W_delta, (2,0)
+            seq_hidden_for_lambda, self.W_delta, (2, 0)
         )
         # T * size_batch * dim_model
         delta_for_lambda = self.soft_relu(
@@ -7083,7 +7172,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         )
         # T * size_batch * dim_model * M
         mu_for_lambda = tensor.tensordot(
-            seq_hidden_for_lambda, self.W_mu, (2,0)
+            seq_hidden_for_lambda, self.W_mu, (2, 0)
         )
         # T * size_batch * dim_process
         lambda_over_seq_tilde = tensor.sum(
@@ -7091,14 +7180,14 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
                 :, :, :, None, :
             ] * self.W_alpha[
                 None, None, :, :, None
-            ], axis = 2
+            ], axis=2
         ) + mu_for_lambda[:, :, :, None]
         # T * size_batch * dim_process * M
         # each time stamp, each seq in batch
         # each process, each simulation for prediction
         lambda_over_seq = self.soft_relu_scale(
-            lambda_over_seq_tilde.dimshuffle(3,0,1,2)
-        ).dimshuffle(1,2,3,0)
+            lambda_over_seq_tilde.dimshuffle(3, 0, 1, 2)
+        ).dimshuffle(1, 2, 3, 0)
         #
         # T * size_batch * dim_process * M
         lambda_sum_over_seq = tensor.sum(
@@ -7116,18 +7205,18 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         term_2 = tensor.exp(
             (
                 -1.0 * tensor.extra_ops.cumsum(
-                    lambda_sum_over_seq, axis = 2
+                    lambda_sum_over_seq, axis=2
                 ) / cum_num[None, None, :]
             ) * time_diffs[
                 None, None, :
             ]
         )
         #
-        #term_2 = tensor.exp(
+        # term_2 = tensor.exp(
         #    -1.0 * lambda_sum_over_seq * time_diffs[
         #        None, None, :
         #    ]
-        #)
+        # )
         # T * size_batch * M
         term_3 = lambda_sum_over_seq
         # T * size_batch * M
@@ -7135,7 +7224,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         # T * size_batch * M
         time_prediction = tensor.mean(
             term_1[None, None, :] * density,
-            axis = 2
+            axis=2
         ) * time_diffs[-1]
         # T * size_batch
         lambda_over_seq_over_sims = lambda_over_seq[
@@ -7147,7 +7236,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         ]
         # T * size_batch * dim_process * M
         prob_over_seq_over_type = tensor.mean(
-            lambda_over_seq_over_sims, axis = 3
+            lambda_over_seq_over_sims, axis=3
         ) * time_diffs[-1]
         # T * size_batch * dim_process
         prob_over_seq_over_type /= tensor.sum(
@@ -7156,9 +7245,9 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
             keepdims=True
         )
         # T * size_batch * dim_process
-        #type_prediction = tensor.argmax(
+        # type_prediction = tensor.argmax(
         #    prob_over_seq_over_type, axis = 2
-        #)
+        # )
         # T * size_batch
         # Now we have :
         # time_prediction, type_prediction, seq_mask
@@ -7186,13 +7275,13 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         self.log_likelihood_type_predict = tensor.sum(
             log_prob_over_seq
         )
-        #diff_type = tensor.abs_(
+        # diff_type = tensor.abs_(
         #    target_type - type_prediction
-        #) * seq_mask
-        #diff_type = tensor.switch(
+        # ) * seq_mask
+        # diff_type = tensor.switch(
         #    diff_type >= numpy.float32(0.5),
         #    numpy.float32(1.0), numpy.float32(0.0)
-        #)
+        # )
         #
         #self.num_of_errors = tensor.sum(diff_type)
         # Time
@@ -7202,10 +7291,10 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         diff_time *= seq_mask
         self.square_errors = tensor.sum(diff_time)
         self.num_of_events = tensor.sum(seq_mask)
-        #TODO: Hamming loss for prediction checking
+        # TODO: Hamming loss for prediction checking
         #
         type_prediction = tensor.argmax(
-            prob_over_seq_over_type, axis = 2
+            prob_over_seq_over_type, axis=2
         )
         diff_type = tensor.abs_(
             target_type - type_prediction
@@ -7216,7 +7305,8 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         )
         self.num_of_errors = tensor.sum(diff_type)
         #
-        self.cost_to_optimize = -self.log_likelihood_type_predict / self.num_of_events + self.square_errors / self.num_of_events + self.term_reg
+        self.cost_to_optimize = -self.log_likelihood_type_predict / \
+            self.num_of_events + self.square_errors / self.num_of_events + self.term_reg
         #self.cost_to_optimize = -self.log_likelihood_type_predict + self.term_reg
         self.grad_params = tensor.grad(
             self.cost_to_optimize, self.params
@@ -7232,7 +7322,8 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         #
     #
     #
-    #TODO: memory efficient version of prediction loss
+    # TODO: memory efficient version of prediction loss
+
     def predict_each_step(
         self, hidden_for_lambda, time_diffs
     ):
@@ -7240,7 +7331,7 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         # time_diffs : M
         delta_for_lambda = self.soft_relu(
             tensor.tensordot(
-                hidden_for_lambda, self.W_delta, (1,0)
+                hidden_for_lambda, self.W_delta, (1, 0)
             )
         )
         # delta_for_lambda : size_batch * dim_model
@@ -7255,26 +7346,26 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         )
         # hidden_with_time : size_batch * dim_model * M
         mu_for_lambda = tensor.tensordot(
-            hidden_for_lambda, self.W_mu, (1,0)
+            hidden_for_lambda, self.W_mu, (1, 0)
         )
         # mu_for_lambda : size_batch * dim_process
         lambda_tilde = tensor.sum(
             hidden_with_time[
                 :, :, None, :
             ] * self.W_alpha[
-                None, :, : , None
-            ], axis = 1
+                None, :, :, None
+            ], axis=1
         ) + mu_for_lambda[:, :, None]
         # size_batch * dim_process * M
         lambda_each_step = self.soft_relu_scale(
-            lambda_tilde.dimshuffle(2,0,1)
-        ).dimshuffle(1,2,0)
+            lambda_tilde.dimshuffle(2, 0, 1)
+        ).dimshuffle(1, 2, 0)
         # size_batch * dim_process * M
         lambda_sum_each_step = tensor.sum(
             lambda_each_step, axis=1
         )
         # size_batch * M
-        #TODO: compute integral
+        # TODO: compute integral
         term_1 = time_diffs
         cum_num = tensor.arange(
             time_diffs.shape[0]+numpy.int32(1)
@@ -7316,26 +7407,26 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
     #
     def compute_prediction_loss_lessmem(
         self,
-        seq_type_event, #seq_time_rep,
+        seq_type_event,  # seq_time_rep,
         seq_time_values,
         seq_mask,
         time_diffs
     ):
         #
-        print "computing predictions loss ... "
-        print "memory efficient version ... "
+        print("computing predictions loss ... ")
+        print("memory efficient version ... ")
         seq_emb_event = self.Emb_event[seq_type_event, :]
         seq_time_rep = tensor.nnet.relu(
-            seq_time_values[:,:,None] - self.Threshold_time[None,None,:]
-        ) # T/T+1 * size_batch * dim_time
+            seq_time_values[:, :, None] - self.Threshold_time[None, None, :]
+        )  # T/T+1 * size_batch * dim_time
         #
         seq_time_rep = tensor.concatenate(
-            [seq_time_rep, seq_time_values[:,:,None]],
+            [seq_time_rep, seq_time_values[:, :, None]],
             axis=2
         )
         #
         seq_emb_time = tensor.tensordot(
-            seq_time_rep, self.Emb_time, (2,0)
+            seq_time_rep, self.Emb_time, (2, 0)
         )
         #
         initial_hidden_mat = tensor.outer(
@@ -7349,32 +7440,32 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         # a special BOS event,
         # to initialize the h and c
         [seq_hidden, seq_cell], _ = theano.scan(
-            fn = self.rnn_unit,
-            sequences = [
+            fn=self.rnn_unit,
+            sequences=[
                 dict(input=seq_emb_event, taps=[0]),
                 dict(input=seq_emb_time, taps=[0])
             ],
-            outputs_info = [
+            outputs_info=[
                 dict(initial=initial_hidden_mat, taps=[-1]),
                 dict(initial=initial_cell_mat, taps=[-1])
             ],
-            non_sequences = None
+            non_sequences=None
         )
-        #TODO: get sequence of hidden units
+        # TODO: get sequence of hidden units
         # seq_hidden : (T+1) * size_batch * dim_model
         seq_hidden_for_lambda = seq_hidden[:-1, :, :]
         # seq_hidden_for_lambda :
         # T * size_batch * dim_model
-        #TODO: predict time and type for each step
+        # TODO: predict time and type for each step
         [prob_over_seq_over_type, time_prediction], _ = theano.scan(
-            fn = self.predict_each_step,
-            sequences = dict(
+            fn=self.predict_each_step,
+            sequences=dict(
                 input=seq_hidden_for_lambda, taps=[0]
             ),
-            outputs_info = [
+            outputs_info=[
                 None, None
             ],
-            non_sequences = time_diffs
+            non_sequences=time_diffs
         )
         #
         target_type = seq_type_event[1:, :]
@@ -7408,10 +7499,10 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         diff_time *= seq_mask
         self.square_errors = tensor.sum(diff_time)
         self.num_of_events = tensor.sum(seq_mask)
-        #TODO: Hamming loss for prediction checking
+        # TODO: Hamming loss for prediction checking
         #
         type_prediction = tensor.argmax(
-            prob_over_seq_over_type, axis = 2
+            prob_over_seq_over_type, axis=2
         )
         diff_type = tensor.abs_(
             target_type - type_prediction
@@ -7422,7 +7513,8 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         )
         self.num_of_errors = tensor.sum(diff_type)
         #
-        self.cost_to_optimize = -self.log_likelihood_type_predict / self.num_of_events + self.square_errors / self.num_of_events + self.term_reg
+        self.cost_to_optimize = -self.log_likelihood_type_predict / \
+            self.num_of_events + self.square_errors / self.num_of_events + self.term_reg
         #self.cost_to_optimize = -self.log_likelihood_type_predict + self.term_reg
         self.grad_params = tensor.grad(
             self.cost_to_optimize, self.params
@@ -7439,8 +7531,9 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
     #
     #
     #
+
     def get_model(self):
-        print "getting model ... "
+        print("getting model ... ")
         model_dict = {}
         for param in self.params:
             model_dict[param.name] = numpy.copy(
@@ -7452,8 +7545,9 @@ class NeuralHawkesAdaptiveBaseCTSM_time_scale_r(object):
         return model_dict
     #
     #
+
     def save_model(self, file_save):
-        print "saving model ... "
+        print("saving model ... ")
         model_dict = {}
         for param in self.params:
             model_dict[param.name] = numpy.copy(

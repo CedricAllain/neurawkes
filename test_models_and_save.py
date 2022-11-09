@@ -389,7 +389,7 @@ def main():
             #    )
             #else:
         else:
-            print "Model not implemented yet !!! "
+            print(f"Model not implemented yet !!! args model is {args.Model}")
         #
     #
 

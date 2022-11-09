@@ -17,14 +17,15 @@ import os
 #import scipy.io
 from collections import defaultdict
 from theano.tensor.shared_randomstreams import RandomStreams
-import utils
+from . import utils
 
-dtype=theano.config.floatX
+dtype = theano.config.floatX
+
 
 class SGD(object):
     # Adam optimizer
     def __init__(self, adam_params=None):
-        print "creating SGD optimizer ... "
+        print("creating SGD optimizer ... ")
         # set hyper params, and use the values in paper as default
         if adam_params == None:
             self.alpha = theano.shared(numpy.float32(1e-3), 'alpha')
@@ -35,16 +36,18 @@ class SGD(object):
         self.updates = []
         #self.m_params, self.v_params = [], []
     #
+
     def set_learn_rate(self, learn_rate):
         self.alpha = theano.shared(
             numpy.float32(learn_rate), 'alpha'
         )
     #
+
     def compute_updates(
-        self, params, grad_params, list_constrain = []
+        self, params, grad_params, list_constrain=[]
     ):
-        print "computing updates ... "
-        for idx_param, (param, grad_param) in enumerate(zip(params, grad_params) ):
+        print("computing updates ... ")
+        for idx_param, (param, grad_param) in enumerate(zip(params, grad_params)):
             param_t = param - (
                 (self.alpha / self.t_step) + numpy.float32(1e-6)
             ) * grad_param
@@ -52,20 +55,20 @@ class SGD(object):
                 param_t_positive = param_t + abs(param_t)
                 param_t_positive *= numpy.float32(0.5)
                 param_t_positive += numpy.float32(1e-9)
-                self.updates.append( (param, param_t_positive) )
+                self.updates.append((param, param_t_positive))
             else:
-                self.updates.append( (param, param_t) )
+                self.updates.append((param, param_t))
             #
-        self.updates.append( (self.t_step, self.t_step+1.0) )
-        print "updates computed ! "
+        self.updates.append((self.t_step, self.t_step+1.0))
+        print("updates computed ! ")
 
 
 class Adam(object):
     # Adam optimizer
     def __init__(self, adam_params=None):
-        print "creating Adam optimizer ... "
+        print("creating Adam optimizer ... ")
         # set hyper params, and use the values in paper as default
-        if adam_params == None:
+        if adam_params is None:
             self.alpha = theano.shared(numpy.float32(1e-3), 'alpha')
             #self.alpha = theano.shared(numpy.float32(1), 'alpha')
             #
@@ -90,16 +93,18 @@ class Adam(object):
         self.clip_min = numpy.float32(-5.0)
         self.clip_max = numpy.float32(5.0)
     #
+
     def set_learn_rate(self, learn_rate):
-        print "setting learning rate : ", learn_rate
+        print("setting learning rate : ", learn_rate)
         self.alpha = theano.shared(
             numpy.float32(learn_rate), 'alpha'
         )
     #
+
     def compute_updates(
-        self, params, grad_params, list_constrain = []
+        self, params, grad_params, list_constrain=[]
     ):
-        print "computing updates ... "
+        print("computing updates ... ")
         for param in params:
             param_shape = numpy.shape(param.get_value())
             self.m_params.append(
@@ -108,7 +113,7 @@ class Adam(object):
             self.v_params.append(
                 theano.shared(numpy.zeros(param_shape, dtype=dtype))
             )
-        for idx_param, (param, grad_param, m_param, v_param) in enumerate(zip(params, grad_params, self.m_params, self.v_params) ):
+        for idx_param, (param, grad_param, m_param, v_param) in enumerate(zip(params, grad_params, self.m_params, self.v_params)):
             #
             if self.clip:
                 grad_param = tensor.clip(
@@ -119,7 +124,7 @@ class Adam(object):
             v_0 = self.beta_2 * v_param + (1-self.beta_2)*(grad_param**2)
             m_t = m_0 / (1-(self.beta_1**self.t_step))
             v_t = v_0 / (1-(self.beta_2**self.t_step))
-            param_t = param - self.alpha*( m_t / (tensor.sqrt(v_t)+self.eps) )
+            param_t = param - self.alpha*(m_t / (tensor.sqrt(v_t)+self.eps))
             #
             if idx_param in list_constrain:
                 param_t_positive = param_t + abs(param_t)
@@ -129,10 +134,10 @@ class Adam(object):
                     (param, param_t_positive)
                 )
             else:
-                self.updates.append( (param, param_t) )
+                self.updates.append((param, param_t))
             #
-            self.updates.append( (m_param, m_0) )
-            self.updates.append( (v_param, v_0) )
-        self.updates.append( (self.t_step, self.t_step+1.0) )
-        self.updates.append( (self.beta_t, self.beta_t*self.decay) )
-        print "updates computed ! "
+            self.updates.append((m_param, m_0))
+            self.updates.append((v_param, v_0))
+        self.updates.append((self.t_step, self.t_step+1.0))
+        self.updates.append((self.beta_t, self.beta_t*self.decay))
+        print("updates computed ! ")
